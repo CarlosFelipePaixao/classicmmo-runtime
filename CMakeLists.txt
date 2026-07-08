@@ -319,6 +319,7 @@ add_library(${PROJECT_NAME} OBJECT
 	src/scene_gameover.cpp
 	src/scene_gameover.h
 	src/classicmmo/network_message.cpp
+	src/classicmmo/network_client.cpp
 	src/scene.h
 	src/scene_import.cpp
 	src/scene_import.h
