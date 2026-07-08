@@ -66,6 +66,7 @@
 #include "main_data.h"
 #include "output.h"
 #include "player.h"
+#include "classicmmo/classicmmo_runtime.h"
 #include <lcf/reader_lcf.h>
 #include <lcf/reader_util.h>
 #include "scene_battle.h"
@@ -191,6 +192,8 @@ void Player::Init(std::vector<std::string> args) {
 	}
 
 	Main_Data::Init();
+
+	classicmmo::ClassicMMORuntime::Initialize();
 
 	DisplayUi.reset();
 
@@ -357,6 +360,8 @@ void Player::Update(bool update_scene) {
 	Audio().Update();
 	Input::Update();
 
+	classicmmo::ClassicMMORuntime::Update();
+
 	// Game events can query full screen status and change their behavior, so this needs to
 	// be a game key and not a system key.
 	if (Input::IsTriggered(Input::TOGGLE_FULLSCREEN)) {
@@ -407,6 +412,8 @@ int Player::GetFrames() {
 }
 
 void Player::Exit() {
+	classicmmo::ClassicMMORuntime::Shutdown();
+
 	Player::exit_flag = true;
 
 	if (player_config.settings_autosave.Get()) {
