@@ -108,7 +108,7 @@ void Scene_GameBrowser::CreateWindows() {
 	}
 
 	help_window = std::make_unique<Window_Help>(0, 0, Player::screen_width, 32);
-	help_window->SetText("EasyRPG Player - RPG Maker 2000/2003 interpreter");
+	help_window->SetText("ClassicMMO Runtime - RPG Maker 2003 Online Foundation");
 
 	load_window = std::make_unique<Window_Help>(Player::screen_width / 4, Player::screen_height / 2 - 16, Player::screen_width / 2, 32);
 	load_window->SetText("Loading...");
