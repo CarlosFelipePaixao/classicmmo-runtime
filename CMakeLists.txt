@@ -931,10 +931,12 @@ endif()
 # PNG pulls in zlib which has a broken config when not both static and shared library are installed
 player_find_package(NAME PNG TARGET PNG::PNG REQUIRED CONFIG_BROKEN)
 player_find_package(NAME fmt TARGET fmt::fmt VERSION 5.2 REQUIRED)
+player_find_package(NAME ixwebsocket TARGET ixwebsocket::ixwebsocket REQUIRED)
 
 # Do not use player_find_package. enable_language used by pixman on Android does not work properly inside functions
 find_package(Pixman REQUIRED)
 target_link_libraries(${PROJECT_NAME} PIXMAN::PIXMAN)
+target_link_libraries(${PROJECT_NAME} ixwebsocket::ixwebsocket)
 
 # Always enable Wine registry support on non-Windows, but not for console ports
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows"
