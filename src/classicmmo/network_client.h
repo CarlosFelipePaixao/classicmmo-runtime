@@ -1,6 +1,9 @@
 #ifndef CLASSICMMO_NETWORK_CLIENT_H
 #define CLASSICMMO_NETWORK_CLIENT_H
 
+#include <ixwebsocket/IXWebSocket.h>
+
+#include <memory>
 #include <string>
 
 namespace classicmmo {
@@ -8,6 +11,7 @@ namespace classicmmo {
 class NetworkClient {
 public:
 	NetworkClient();
+	~NetworkClient();
 
 	bool Connect(const std::string& server_url);
 	void Disconnect();
@@ -26,6 +30,7 @@ public:
 	void Update();
 
 private:
+	std::unique_ptr<ix::WebSocket> socket;
 	bool connected = false;
 	std::string url;
 };
