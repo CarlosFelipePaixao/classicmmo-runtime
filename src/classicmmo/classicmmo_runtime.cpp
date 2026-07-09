@@ -39,6 +39,37 @@ namespace classicmmo
 			}
 		}
 
+		std::string GetEnvString(const char *name)
+		{
+			const char *value = std::getenv(name);
+
+			if (!value)
+			{
+				return "";
+			}
+
+			return std::string(value);
+		}
+
+		int GetEnvInt(const char *name, int fallback)
+		{
+			const char *value = std::getenv(name);
+
+			if (!value)
+			{
+				return fallback;
+			}
+
+			try
+			{
+				return std::stoi(value);
+			}
+			catch (...)
+			{
+				return fallback;
+			}
+		}
+
 		void ResetLastPlayerPosition()
 		{
 			g_last_map_id = -1;
@@ -85,13 +116,25 @@ namespace classicmmo
 			g_last_y = y;
 			g_last_direction = direction;
 
+			std::string sprite_name = Main_Data::game_player->GetSpriteName();
+			int sprite_index = Main_Data::game_player->GetSpriteIndex();
+
+			const std::string sprite_name_override = GetEnvString("CLASSICMMO_SPRITE_NAME");
+
+			if (!sprite_name_override.empty())
+			{
+				sprite_name = sprite_name_override;
+			}
+
+			sprite_index = GetEnvInt("CLASSICMMO_SPRITE_INDEX", sprite_index);
+
 			g_network_client.SendPosition(
 				std::to_string(map_id),
 				x,
 				y,
 				DirectionToString(direction),
-				Main_Data::game_player->GetSpriteName(),
-				Main_Data::game_player->GetSpriteIndex());
+				sprite_name,
+				sprite_index);
 		}
 
 	} // namespace
