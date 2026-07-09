@@ -31,9 +31,6 @@ namespace classicmmo
             connected = true;
             std::cout << "[ClassicMMO] Connected to " << url << std::endl;
 
-            SendChat("runtime connected");
-            SendPosition("test_map", 10, 20, "down");
-
             return;
         }
 
