@@ -4,29 +4,38 @@
 
 #include <iostream>
 
-namespace classicmmo {
+namespace classicmmo
+{
 
-NetworkClient::NetworkClient() = default;
+    NetworkClient::NetworkClient() = default;
 
-NetworkClient::~NetworkClient() {
-	Disconnect();
-}
+    NetworkClient::~NetworkClient()
+    {
+        Disconnect();
+    }
 
-bool NetworkClient::Connect(const std::string& server_url) {
-	if (connected) {
-		return true;
-	}
+    bool NetworkClient::Connect(const std::string &server_url)
+    {
+        if (connected)
+        {
+            return true;
+        }
 
-	url = server_url;
-	socket = std::make_unique<ix::WebSocket>();
-	socket->setUrl(url);
+        url = server_url;
+        socket = std::make_unique<ix::WebSocket>();
+        socket->setUrl(url);
 
-	socket->setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg) {
+        socket->setOnMessageCallback([this](const ix::WebSocketMessagePtr &msg)
+                                     {
 		if (msg->type == ix::WebSocketMessageType::Open) {
-			connected = true;
-			std::cout << "[ClassicMMO] Connected to " << url << std::endl;
-			return;
-		}
+            connected = true;
+            std::cout << "[ClassicMMO] Connected to " << url << std::endl;
+
+            SendChat("runtime connected");
+            SendPosition("test_map", 10, 20, "down");
+
+            return;
+        }
 
 		if (msg->type == ix::WebSocketMessageType::Close) {
 			connected = false;
@@ -48,70 +57,76 @@ bool NetworkClient::Connect(const std::string& server_url) {
 			} else {
 				std::cout << "[ClassicMMO] Received invalid JSON: " << msg->str << std::endl;
 			}
-		}
-	});
+		} });
 
-	socket->start();
+        socket->start();
 
-	std::cout << "[ClassicMMO] Connecting to " << url << std::endl;
+        std::cout << "[ClassicMMO] Connecting to " << url << std::endl;
 
-	return true;
-}
+        return true;
+    }
 
-void NetworkClient::Disconnect() {
-	if (socket) {
-		socket->stop();
-		socket.reset();
-	}
+    void NetworkClient::Disconnect()
+    {
+        if (socket)
+        {
+            socket->stop();
+            socket.reset();
+        }
 
-	if (connected) {
-		std::cout << "[ClassicMMO] Disconnected from " << url << std::endl;
-	}
+        if (connected)
+        {
+            std::cout << "[ClassicMMO] Disconnected from " << url << std::endl;
+        }
 
-	connected = false;
-	url.clear();
-}
+        connected = false;
+        url.clear();
+    }
 
-bool NetworkClient::IsConnected() const {
-	return connected;
-}
+    bool NetworkClient::IsConnected() const
+    {
+        return connected;
+    }
 
-void NetworkClient::SendChat(const std::string& text) {
-	if (!socket || !connected) {
-		return;
-	}
+    void NetworkClient::SendChat(const std::string &text)
+    {
+        if (!socket || !connected)
+        {
+            return;
+        }
 
-	const auto message = NetworkMessage::MakeChatMessage(text);
-	socket->sendText(message);
+        const auto message = NetworkMessage::MakeChatMessage(text);
+        socket->sendText(message);
 
-	std::cout << "[ClassicMMO] Send chat: " << message << std::endl;
-}
+        std::cout << "[ClassicMMO] Send chat: " << message << std::endl;
+    }
 
-void NetworkClient::SendPosition(
-	const std::string& map_id,
-	int x,
-	int y,
-	const std::string& direction
-) {
-	if (!socket || !connected) {
-		return;
-	}
+    void NetworkClient::SendPosition(
+        const std::string &map_id,
+        int x,
+        int y,
+        const std::string &direction)
+    {
+        if (!socket || !connected)
+        {
+            return;
+        }
 
-	const auto message = NetworkMessage::MakePositionMessage(
-		map_id,
-		x,
-		y,
-		direction
-	);
+        const auto message = NetworkMessage::MakePositionMessage(
+            map_id,
+            x,
+            y,
+            direction);
 
-	socket->sendText(message);
+        socket->sendText(message);
 
-	std::cout << "[ClassicMMO] Send position: " << message << std::endl;
-}
+        std::cout << "[ClassicMMO] Send position: " << message << std::endl;
+    }
 
-void NetworkClient::Update() {
-	// IXWebSocket runs callbacks on its own internal thread.
-	// Future: drain queued server events here and apply them to the game world.
-}
+    void NetworkClient::Update()
+    {
+        // IXWebSocket runs callbacks on its own internal thread.
+        // Future: drain queued server events here and apply them to the game world.
+    }
 
 } // namespace classicmmo
