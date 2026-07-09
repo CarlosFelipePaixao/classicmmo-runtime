@@ -23,6 +23,8 @@
 #include "output.h"
 #include "player.h"
 
+#include "classicmmo/remote_character.h"
+
 Sprite_Character::Sprite_Character(Game_Character* character, int x_offset, int y_offset) :
 	character(character),
 	tile_id(-1),
@@ -39,16 +41,33 @@ void Sprite_Character::Draw(Bitmap &dst) {
 	if (UsesCharset()) {
 		int row = character->GetFacing();
 		auto frame = character->GetAnimFrame();
-		if (frame >= lcf::rpg::EventPage::Frame_middle2) frame = lcf::rpg::EventPage::Frame_middle;
-		SetSrcRect({frame * chara_width, row * chara_height, chara_width, chara_height});
+
+		if (frame >= lcf::rpg::EventPage::Frame_middle2) {
+			frame = lcf::rpg::EventPage::Frame_middle;
+		}
+
+		SetSrcRect({
+			frame * chara_width,
+			row * chara_height,
+			chara_width,
+			chara_height
+		});
 	}
 
 	SetFlashEffect(character->GetFlashColor());
 
 	SetOpacity(character->GetOpacity());
 
-	SetX(character->GetScreenX() + x_offset);
-	SetY(character->GetScreenY() + y_offset);
+	int screen_x = character->GetScreenX() + x_offset;
+	int screen_y = character->GetScreenY() + y_offset;
+
+	if (auto* remote_character = dynamic_cast<classicmmo::RemoteCharacter*>(character)) {
+		screen_x += remote_character->GetVisualOffsetX();
+		screen_y += remote_character->GetVisualOffsetY();
+	}
+
+	SetX(screen_x);
+	SetY(screen_y);
 
 	int bush_split = 4 - character->GetBushDepth();
 	SetBushDepth(bush_split > 3 ? 0 : GetHeight() / bush_split);
@@ -74,10 +93,11 @@ void Sprite_Character::Update() {
 			char_request->Start();
 		} else {
 			const auto chipset_name = Game_Map::GetChipsetName();
+
 			if (chipset_name.empty()) {
 				OnTileSpriteReady(nullptr);
 			} else {
-				FileRequestAsync *tile_request = AsyncHandler::RequestFile("ChipSet", Game_Map::GetChipsetName());
+				FileRequestAsync* tile_request = AsyncHandler::RequestFile("ChipSet", Game_Map::GetChipsetName());
 				tile_request->SetGraphicFile(true);
 				request_id = tile_request->Bind(&Sprite_Character::OnTileSpriteReady, this);
 				tile_request->Start();
@@ -105,10 +125,10 @@ void Sprite_Character::OnTileSpriteReady(FileRequestResult*) {
 	const auto chipset = Game_Map::GetChipsetName();
 
 	BitmapRef tile;
+
 	if (!chipset.empty()) {
 		tile = Cache::Tile(Game_Map::GetChipsetName(), tile_id);
-	}
-	else {
+	} else {
 		tile = Bitmap::Create(16, 16, true);
 	}
 
@@ -125,11 +145,13 @@ void Sprite_Character::ChipsetUpdated() {
 	if (UsesCharset()) {
 		return;
 	}
+
 	refresh_bitmap = true;
 }
 
 Rect Sprite_Character::GetCharacterRect(std::string_view name, int index, const Rect bitmap_rect) {
 	Rect rect;
+
 	rect.width = 24 * (TILE_SIZE / 16) * 3;
 	rect.height = 32 * (TILE_SIZE / 16) * 4;
 
@@ -139,24 +161,34 @@ Rect Sprite_Character::GetCharacterRect(std::string_view name, int index, const 
 	// VX Ace uses a single 1x1 spriteset of 3x4 sprites.
 	if (!name.empty() && name.front() == '$') {
 		if (!Player::HasEasyRpgExtensions()) {
-			Output::Debug("Ignoring large charset {}. EasyRPG Extension not enabled.", name);
+			Output::Debug(
+				"Ignoring large charset {}.\n"
+				"EasyRPG Extension not enabled.",
+				name
+			);
 		} else {
 			rect.width = bitmap_rect.width * (TILE_SIZE / 16) / 4;
 			rect.height = bitmap_rect.height * (TILE_SIZE / 16) / 2;
 		}
 	}
+
 	rect.x = (index % 4) * rect.width;
 	rect.y = (index / 4) * rect.height;
+
 	return rect;
 }
 
 void Sprite_Character::OnCharSpriteReady(FileRequestResult*) {
 	SetBitmap(Cache::Charset(character_name));
+
 	auto rect = GetCharacterRect(character_name, character_index, GetBitmap()->GetRect());
+
 	chara_width = rect.width / 3;
 	chara_height = rect.height / 4;
+
 	SetOx(chara_width / 2);
 	SetOy(chara_height);
+
 	SetSpriteRect(rect);
 
 	Update();

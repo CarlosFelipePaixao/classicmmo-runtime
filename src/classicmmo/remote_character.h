@@ -24,7 +24,25 @@ public:
 		int sprite_index
 	);
 
+	void UpdateVisualInterpolation();
+
+	int GetVisualOffsetX() const;
+	int GetVisualOffsetY() const;
+
 	void UpdateNextMovementAction() override;
+
+private:
+	int visual_offset_x = 0;
+	int visual_offset_y = 0;
+
+	bool has_spawned = false;
+
+	int walking_anim_tick = 0;
+
+	void ClearVisualOffset();
+	void SetIdleAnimationFrame();
+	void SetWalkingAnimationFrame();
+	bool IsVisuallyMoving() const;
 };
 
 } // namespace classicmmo

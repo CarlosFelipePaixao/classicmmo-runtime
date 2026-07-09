@@ -440,6 +440,11 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 		RemoveClassicMMOSpritesFor(it->second.get());
 		it = classicmmo_remote_players.erase(it);
 	}
+	
+	for (auto &entry : classicmmo_remote_players)
+	{
+		entry.second->UpdateVisualInterpolation();
+	}
 }
 
 void Spriteset_Map::CreateAirshipShadowSprite(bool create_x_clone, bool create_y_clone)
