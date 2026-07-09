@@ -16,6 +16,8 @@
  */
 
 // Headers
+
+#include <string>
 #include "font.h"
 #include "text.h"
 #include "sprite_character.h"
@@ -24,8 +26,24 @@
 #include "bitmap.h"
 #include "output.h"
 #include "player.h"
-
 #include "classicmmo/remote_character.h"
+
+namespace
+{
+
+	std::string ClassicMMOClampName(const std::string &name)
+	{
+		constexpr std::size_t kMaxNameLength = 12;
+
+		if (name.size() <= kMaxNameLength)
+		{
+			return name;
+		}
+
+		return name.substr(0, kMaxNameLength - 3) + "...";
+	}
+
+} // namespace
 
 Sprite_Character::Sprite_Character(Game_Character *character, int x_offset, int y_offset) : character(character),
 																							tile_id(-1),
@@ -80,7 +98,7 @@ void Sprite_Character::Draw(Bitmap &dst)
 
 	if (auto *remote_character = dynamic_cast<classicmmo::RemoteCharacter *>(character))
 	{
-		const std::string &player_name = remote_character->GetPlayerName();
+		const std::string player_name = ClassicMMOClampName(remote_character->GetPlayerName());
 
 		if (!player_name.empty())
 		{
@@ -88,7 +106,7 @@ void Sprite_Character::Draw(Bitmap &dst)
 			const Rect text_rect = Text::GetSize(*font, player_name);
 
 			const int name_x = screen_x - (text_rect.width / 2);
-			const int name_y = screen_y - chara_height - 12;
+			const int name_y = screen_y - chara_height - 5;
 
 			Text::Draw(dst, name_x + 1, name_y + 1, *font, Color(0, 0, 0, 255), player_name);
 			Text::Draw(dst, name_x, name_y, *font, Color(255, 255, 255, 255), player_name);
