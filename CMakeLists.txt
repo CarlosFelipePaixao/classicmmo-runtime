@@ -321,6 +321,7 @@ add_library(${PROJECT_NAME} OBJECT
 	src/classicmmo/network_message.cpp
 	src/classicmmo/network_client.cpp
 	src/classicmmo/classicmmo_runtime.cpp
+	src/classicmmo/remote_character.cpp
 	src/scene.h
 	src/scene_import.cpp
 	src/scene_import.h

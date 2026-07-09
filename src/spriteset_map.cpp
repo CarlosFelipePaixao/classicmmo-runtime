@@ -35,43 +35,54 @@
 #include "drawable_list.h"
 #include "map_data.h"
 
-namespace {
+namespace
+{
 
-int ClassicMMODirectionFromString(const std::string& direction) {
-	if (direction == "up") {
-		return Game_Character::Up;
-	}
-
-	if (direction == "right") {
-		return Game_Character::Right;
-	}
-
-	if (direction == "left") {
-		return Game_Character::Left;
-	}
-
-	return Game_Character::Down;
-}
-
-bool ClassicMMOTryParseMapId(const std::string& value, int& out_map_id) {
-	try {
-		size_t parsed = 0;
-		const int map_id = std::stoi(value, &parsed);
-
-		if (parsed != value.size()) {
-			return false;
+	int ClassicMMODirectionFromString(const std::string &direction)
+	{
+		if (direction == "up")
+		{
+			return Game_Character::Up;
 		}
 
-		out_map_id = map_id;
-		return true;
-	} catch (...) {
-		return false;
+		if (direction == "right")
+		{
+			return Game_Character::Right;
+		}
+
+		if (direction == "left")
+		{
+			return Game_Character::Left;
+		}
+
+		return Game_Character::Down;
 	}
-}
+
+	bool ClassicMMOTryParseMapId(const std::string &value, int &out_map_id)
+	{
+		try
+		{
+			size_t parsed = 0;
+			const int map_id = std::stoi(value, &parsed);
+
+			if (parsed != value.size())
+			{
+				return false;
+			}
+
+			out_map_id = map_id;
+			return true;
+		}
+		catch (...)
+		{
+			return false;
+		}
+	}
 
 } // namespace
 
-Spriteset_Map::Spriteset_Map() {
+Spriteset_Map::Spriteset_Map()
+{
 	panorama = std::make_unique<Plane>();
 	panorama->SetZ(Priority_Background);
 
@@ -80,7 +91,8 @@ Spriteset_Map::Spriteset_Map() {
 
 	screen = std::make_unique<Screen>();
 
-	if (Player::IsRPG2k3()) {
+	if (Player::IsRPG2k3())
+	{
 		frame = std::make_unique<Frame>();
 	}
 
@@ -91,7 +103,8 @@ Spriteset_Map::Spriteset_Map() {
 	Update();
 }
 
-void Spriteset_Map::Refresh() {
+void Spriteset_Map::Refresh()
+{
 	CalculateMapRenderOffset();
 
 	tilemap = std::make_unique<Tilemap>();
@@ -109,7 +122,8 @@ void Spriteset_Map::Refresh() {
 	need_x_clone = Game_Map::LoopHorizontal();
 	need_y_clone = Game_Map::LoopVertical();
 
-	for (Game_Event& ev : Game_Map::GetEvents()) {
+	for (Game_Event &ev : Game_Map::GetEvents())
+	{
 		CreateSprite(&ev, need_x_clone, need_y_clone);
 	}
 
@@ -117,13 +131,15 @@ void Spriteset_Map::Refresh() {
 
 	CreateSprite(Main_Data::game_player.get(), need_x_clone, need_y_clone);
 
-	for (bool& v: vehicle_loaded) {
+	for (bool &v : vehicle_loaded)
+	{
 		v = false;
 	}
 }
 
 // Update
-void Spriteset_Map::Update() {
+void Spriteset_Map::Update()
+{
 	Tone new_tone = Main_Data::game_screen->GetTone();
 
 	tilemap->SetOx(Game_Map::GetDisplayX() / (SCREEN_TILE_SIZE / TILE_SIZE));
@@ -132,7 +148,8 @@ void Spriteset_Map::Update() {
 
 	SyncClassicMMORemotePlayers();
 
-	for (const auto& character_sprite : character_sprites) {
+	for (const auto &character_sprite : character_sprites)
+	{
 		character_sprite->Update();
 		character_sprite->SetTone(new_tone);
 	}
@@ -141,18 +158,21 @@ void Spriteset_Map::Update() {
 	panorama->SetOy(Game_Map::Parallax::GetY());
 	panorama->SetTone(new_tone);
 
-	Game_Vehicle* vehicle;
+	Game_Vehicle *vehicle;
 	int map_id = Game_Map::GetMapId();
-	for (int i = 1; i <= 3; ++i) {
-		vehicle = Game_Map::GetVehicle((Game_Vehicle::Type) i);
+	for (int i = 1; i <= 3; ++i)
+	{
+		vehicle = Game_Map::GetVehicle((Game_Vehicle::Type)i);
 
-		if (!vehicle_loaded[i - 1] && vehicle->GetMapId() == map_id) {
+		if (!vehicle_loaded[i - 1] && vehicle->GetMapId() == map_id)
+		{
 			vehicle_loaded[i - 1] = true;
 			CreateSprite(vehicle, need_x_clone, need_y_clone);
 		}
 	}
 
-	for (auto& shadow : airship_shadows) {
+	for (auto &shadow : airship_shadows)
+	{
 		shadow->SetTone(new_tone);
 		shadow->Update();
 	}
@@ -160,29 +180,36 @@ void Spriteset_Map::Update() {
 	Main_Data::game_dynrpg->Update();
 }
 
-void Spriteset_Map::ChipsetUpdated() {
-	if (!Game_Map::GetChipsetName().empty()) {
-		FileRequestAsync* request = AsyncHandler::RequestFile("ChipSet", Game_Map::GetChipsetName());
+void Spriteset_Map::ChipsetUpdated()
+{
+	if (!Game_Map::GetChipsetName().empty())
+	{
+		FileRequestAsync *request = AsyncHandler::RequestFile("ChipSet", Game_Map::GetChipsetName());
 		tilemap_request_id = request->Bind(&Spriteset_Map::OnTilemapSpriteReady, this);
 		request->SetImportantFile(true);
 		request->SetGraphicFile(true);
 		request->Start();
 	}
-	else {
+	else
+	{
 		OnTilemapSpriteReady(NULL);
 	}
 
-	for (auto& sprite: character_sprites) {
+	for (auto &sprite : character_sprites)
+	{
 		sprite->ChipsetUpdated();
 	}
 }
 
-void Spriteset_Map::ParallaxUpdated() {
+void Spriteset_Map::ParallaxUpdated()
+{
 	std::string name = Game_Map::Parallax::GetName();
-	if (name != panorama_name) {
+	if (name != panorama_name)
+	{
 		panorama_name = name;
-		if (!name.empty()) {
-			FileRequestAsync* request = AsyncHandler::RequestFile("Panorama", panorama_name);
+		if (!name.empty())
+		{
+			FileRequestAsync *request = AsyncHandler::RequestFile("Panorama", panorama_name);
 			request->SetGraphicFile(true);
 			request->SetImportantFile(true);
 			panorama_request_id = request->Bind(&Spriteset_Map::OnPanoramaSpriteReady, this);
@@ -190,55 +217,69 @@ void Spriteset_Map::ParallaxUpdated() {
 		}
 	}
 
-	if (name.empty()) {
+	if (name.empty())
+	{
 		panorama->SetBitmap(BitmapRef());
 		Game_Map::Parallax::Initialize(0, 0);
 	}
 }
 
-void Spriteset_Map::SystemGraphicUpdated() {
-	for (auto& shadow : airship_shadows) {
+void Spriteset_Map::SystemGraphicUpdated()
+{
+	for (auto &shadow : airship_shadows)
+	{
 		shadow->RecreateShadow();
 	}
 }
 
-void Spriteset_Map::SubstituteDown(int old_id, int new_id) {
+void Spriteset_Map::SubstituteDown(int old_id, int new_id)
+{
 	int num_subst = Game_Map::SubstituteDown(old_id, new_id);
-	if (num_subst) {
+	if (num_subst)
+	{
 		tilemap->OnSubstituteDown();
 	}
 }
 
-void Spriteset_Map::SubstituteUp(int old_id, int new_id) {
+void Spriteset_Map::SubstituteUp(int old_id, int new_id)
+{
 	int num_subst = Game_Map::SubstituteUp(old_id, new_id);
-	if (num_subst) {
+	if (num_subst)
+	{
 		tilemap->OnSubstituteUp();
 	}
 }
 
-void Spriteset_Map::ReplaceDownAt(int x, int y, int tile_index, bool disable_autotile) {
-	if (tile_index >= BLOCK_F_INDEX) tile_index = BLOCK_F_INDEX - 1;
+void Spriteset_Map::ReplaceDownAt(int x, int y, int tile_index, bool disable_autotile)
+{
+	if (tile_index >= BLOCK_F_INDEX)
+		tile_index = BLOCK_F_INDEX - 1;
 
 	auto tile_id = IndexToChipId(tile_index);
 	tilemap->SetMapTileDataDownAt(x, y, tile_id, disable_autotile);
 }
 
-void Spriteset_Map::ReplaceUpAt(int x, int y, int tile_index) {
+void Spriteset_Map::ReplaceUpAt(int x, int y, int tile_index)
+{
 	tile_index += BLOCK_F_INDEX;
-	if (tile_index >= NUM_UPPER_TILES + BLOCK_F_INDEX) tile_index = BLOCK_F_INDEX;
+	if (tile_index >= NUM_UPPER_TILES + BLOCK_F_INDEX)
+		tile_index = BLOCK_F_INDEX;
 
 	auto tile_id = IndexToChipId(tile_index);
 	tilemap->SetMapTileDataUpAt(x, y, tile_id);
 }
 
-bool Spriteset_Map::RequireClear(DrawableList& drawable_list) {
-	if (drawable_list.empty()) {
+bool Spriteset_Map::RequireClear(DrawableList &drawable_list)
+{
+	if (drawable_list.empty())
+	{
 		return true;
 	}
 
 	// When using a custom resolution that is not divisible by 16, clear to avoid
 	// artifacts at the borders
-	if (Player::screen_width % TILE_SIZE != 0 || Player::screen_height % TILE_SIZE != 0) {
+	if (Player::screen_width % TILE_SIZE != 0 || Player::screen_height % TILE_SIZE != 0)
+	{
 		return true;
 	}
 
@@ -246,42 +287,50 @@ bool Spriteset_Map::RequireClear(DrawableList& drawable_list) {
 	// When there is nothing below the tilemap it can be drawn opaque (faster)
 	tilemap->SetFastBlitDown(false);
 
-	if (!panorama_name.empty()) {
+	if (!panorama_name.empty())
+	{
 		// Map has a panorama -> No opaque tilemap blit possible
 		// but the panorama is drawn opaque -> clearing the screen is not needed
 		return false;
 	}
 
 	// The list is about to be drawn, so we can just sort it now if needed.
-	if (drawable_list.IsDirty()) {
+	if (drawable_list.IsDirty())
+	{
 		drawable_list.Sort();
 	}
 
 	// Only if there is nothing below the tileset, can we do fast blitting.
-	if ((*drawable_list.begin())->GetZ() >= Priority_TilesetBelow) {
+	if ((*drawable_list.begin())->GetZ() >= Priority_TilesetBelow)
+	{
 		tilemap->SetFastBlitDown(true);
 	}
 
 	return true;
 }
 
-void Spriteset_Map::CreateSprite(Game_Character* character, bool create_x_clone, bool create_y_clone) {
-	auto add_sprite = [&](auto&& chara) {
+void Spriteset_Map::CreateSprite(Game_Character *character, bool create_x_clone, bool create_y_clone)
+{
+	auto add_sprite = [&](auto &&chara)
+	{
 		chara->SetRenderOx(map_render_ox);
 		chara->SetRenderOy(map_render_oy);
 		character_sprites.push_back(std::forward<decltype(chara)>(chara));
 	};
 
 	add_sprite(std::make_unique<Sprite_Character>(character));
-	if (create_x_clone) {
+	if (create_x_clone)
+	{
 		add_sprite(std::make_unique<Sprite_Character>(character, -map_tiles_x, 0));
 		add_sprite(std::make_unique<Sprite_Character>(character, map_tiles_x, 0));
 	}
-	if (create_y_clone) {
+	if (create_y_clone)
+	{
 		add_sprite(std::make_unique<Sprite_Character>(character, 0, -map_tiles_y));
 		add_sprite(std::make_unique<Sprite_Character>(character, 0, map_tiles_y));
 	}
-	if (create_x_clone && create_y_clone) {
+	if (create_x_clone && create_y_clone)
+	{
 		add_sprite(std::make_unique<Sprite_Character>(character, map_tiles_x, map_tiles_y));
 		add_sprite(std::make_unique<Sprite_Character>(character, -map_tiles_x, map_tiles_y));
 		add_sprite(std::make_unique<Sprite_Character>(character, map_tiles_x, -map_tiles_y));
@@ -289,34 +338,38 @@ void Spriteset_Map::CreateSprite(Game_Character* character, bool create_x_clone,
 	}
 }
 
-void Spriteset_Map::RemoveClassicMMOSpritesFor(Game_Character* character) {
+void Spriteset_Map::RemoveClassicMMOSpritesFor(Game_Character *character)
+{
 	character_sprites.erase(
 		std::remove_if(
 			character_sprites.begin(),
 			character_sprites.end(),
-			[character](const std::unique_ptr<Sprite_Character>& sprite) {
+			[character](const std::unique_ptr<Sprite_Character> &sprite)
+			{
 				return sprite->GetCharacter() == character;
-			}
-		),
-		character_sprites.end()
-	);
+			}),
+		character_sprites.end());
 }
 
-void Spriteset_Map::SyncClassicMMORemotePlayers() {
+void Spriteset_Map::SyncClassicMMORemotePlayers()
+{
 	auto remote_players = classicmmo::ClassicMMORuntime::GetNetworkClient().GetRemotePlayersSnapshot();
 
 	const int current_map_id = Game_Map::GetMapId();
 
 	std::unordered_set<std::string> visible_remote_ids;
 
-	for (const auto& remote_player : remote_players) {
+	for (const auto &remote_player : remote_players)
+	{
 		int remote_map_id = 0;
 
-		if (!ClassicMMOTryParseMapId(remote_player.map_id, remote_map_id)) {
+		if (!ClassicMMOTryParseMapId(remote_player.map_id, remote_map_id))
+		{
 			continue;
 		}
 
-		if (remote_map_id != current_map_id) {
+		if (remote_map_id != current_map_id)
+		{
 			continue;
 		}
 
@@ -326,24 +379,28 @@ void Spriteset_Map::SyncClassicMMORemotePlayers() {
 
 		auto it = classicmmo_remote_players.find(remote_player.client_id);
 
-		if (it == classicmmo_remote_players.end()) {
-			auto character = std::make_unique<Game_Player>();
+		if (it == classicmmo_remote_players.end())
+		{
+			auto character = std::make_unique<classicmmo::RemoteCharacter>();
 
-			character->SetMapId(remote_map_id);
-			character->SetX(remote_player.x);
-			character->SetY(remote_player.y);
-			character->SetDirection(direction);
-			character->SetFacing(direction);
-			character->SetThrough(true);
+			std::string sprite_name;
+			int sprite_index = 0;
 
-			if (Main_Data::game_player) {
-				character->SetSpriteGraphic(
-					Main_Data::game_player->GetSpriteName(),
-					Main_Data::game_player->GetSpriteIndex()
-				);
+			if (Main_Data::game_player)
+			{
+				sprite_name = Main_Data::game_player->GetSpriteName();
+				sprite_index = Main_Data::game_player->GetSpriteIndex();
 			}
 
-			Game_Character* character_ptr = character.get();
+			character->ApplyNetworkState(
+				remote_map_id,
+				remote_player.x,
+				remote_player.y,
+				direction,
+				sprite_name,
+				sprite_index);
+
+			Game_Character *character_ptr = character.get();
 
 			classicmmo_remote_players.emplace(remote_player.client_id, std::move(character));
 
@@ -352,17 +409,30 @@ void Spriteset_Map::SyncClassicMMORemotePlayers() {
 			continue;
 		}
 
-		Game_Player* character = it->second.get();
+		classicmmo::RemoteCharacter *character = it->second.get();
 
-		character->SetMapId(remote_map_id);
-		character->SetX(remote_player.x);
-		character->SetY(remote_player.y);
-		character->SetDirection(direction);
-		character->SetFacing(direction);
+		std::string sprite_name;
+		int sprite_index = 0;
+
+		if (Main_Data::game_player)
+		{
+			sprite_name = Main_Data::game_player->GetSpriteName();
+			sprite_index = Main_Data::game_player->GetSpriteIndex();
+		}
+
+		character->ApplyNetworkState(
+			remote_map_id,
+			remote_player.x,
+			remote_player.y,
+			direction,
+			sprite_name,
+			sprite_index);
 	}
 
-	for (auto it = classicmmo_remote_players.begin(); it != classicmmo_remote_players.end();) {
-		if (visible_remote_ids.find(it->first) != visible_remote_ids.end()) {
+	for (auto it = classicmmo_remote_players.begin(); it != classicmmo_remote_players.end();)
+	{
+		if (visible_remote_ids.find(it->first) != visible_remote_ids.end())
+		{
 			++it;
 			continue;
 		}
@@ -372,23 +442,28 @@ void Spriteset_Map::SyncClassicMMORemotePlayers() {
 	}
 }
 
-void Spriteset_Map::CreateAirshipShadowSprite(bool create_x_clone, bool create_y_clone) {
-	auto add_sprite = [&](auto&& chara) {
+void Spriteset_Map::CreateAirshipShadowSprite(bool create_x_clone, bool create_y_clone)
+{
+	auto add_sprite = [&](auto &&chara)
+	{
 		chara->SetRenderOx(map_render_ox);
 		chara->SetRenderOy(map_render_oy);
 		airship_shadows.push_back(std::forward<decltype(chara)>(chara));
 	};
 
 	add_sprite(std::make_unique<Sprite_AirshipShadow>());
-	if (create_x_clone) {
+	if (create_x_clone)
+	{
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(-map_tiles_x, 0));
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(map_tiles_x, 0));
 	}
-	if (create_y_clone) {
+	if (create_y_clone)
+	{
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(0, -map_tiles_y));
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(0, map_tiles_y));
 	}
-	if (create_x_clone && create_y_clone) {
+	if (create_x_clone && create_y_clone)
+	{
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(map_tiles_x, map_tiles_y));
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(-map_tiles_x, map_tiles_y));
 		add_sprite(std::make_unique<Sprite_AirshipShadow>(map_tiles_x, -map_tiles_y));
@@ -396,11 +471,14 @@ void Spriteset_Map::CreateAirshipShadowSprite(bool create_x_clone, bool create_y
 	}
 }
 
-void Spriteset_Map::OnTilemapSpriteReady(FileRequestResult*) {
-	if (!Game_Map::GetChipsetName().empty()) {
+void Spriteset_Map::OnTilemapSpriteReady(FileRequestResult *)
+{
+	if (!Game_Map::GetChipsetName().empty())
+	{
 		tilemap->SetChipset(Cache::Chipset(Game_Map::GetChipsetName()));
 	}
-	else {
+	else
+	{
 		tilemap->SetChipset(Bitmap::Create(480, 256));
 	}
 
@@ -412,14 +490,16 @@ void Spriteset_Map::OnTilemapSpriteReady(FileRequestResult*) {
 	tilemap->SetAnimationSpeed(Game_Map::GetAnimationSpeed());
 }
 
-void Spriteset_Map::OnPanoramaSpriteReady(FileRequestResult* result) {
+void Spriteset_Map::OnPanoramaSpriteReady(FileRequestResult *result)
+{
 	BitmapRef panorama_bmp = Cache::Panorama(result->file);
 	panorama->SetBitmap(panorama_bmp);
 	Game_Map::Parallax::Initialize(panorama_bmp->GetWidth(), panorama_bmp->GetHeight());
 	CalculatePanoramaRenderOffset();
 }
 
-void Spriteset_Map::CalculateMapRenderOffset() {
+void Spriteset_Map::CalculateMapRenderOffset()
+{
 	map_render_ox = 0;
 	map_render_oy = 0;
 
@@ -431,15 +511,18 @@ void Spriteset_Map::CalculateMapRenderOffset() {
 	panorama->SetRenderOy(0);
 	screen->SetViewport(Rect());
 
-	if (Player::game_config.fake_resolution.Get()) {
+	if (Player::game_config.fake_resolution.Get())
+	{
 		// Resolution hack for tiles and sprites
 		map_tiles_x = std::max<int>(Game_Map::GetTilesX(), 20) * TILE_SIZE;
 		map_tiles_y = std::max<int>(Game_Map::GetTilesY(), 15) * TILE_SIZE;
 
-		if (map_tiles_x < Player::screen_width) {
+		if (map_tiles_x < Player::screen_width)
+		{
 			map_render_ox = (Player::screen_width - map_tiles_x) / 2;
 		}
-		if (map_tiles_y < Player::screen_height) {
+		if (map_tiles_y < Player::screen_height)
+		{
 			map_render_oy = (Player::screen_height - map_tiles_y) / 2;
 		}
 
@@ -449,17 +532,21 @@ void Spriteset_Map::CalculateMapRenderOffset() {
 	}
 }
 
-void Spriteset_Map::CalculatePanoramaRenderOffset() {
+void Spriteset_Map::CalculatePanoramaRenderOffset()
+{
 	// Resolution hack for Panorama
 	// If the map is too small to fit in the screen, add an offset corresponding to the black border's size
-	if (Player::game_config.fake_resolution.Get()) {
+	if (Player::game_config.fake_resolution.Get())
+	{
 		int map_width_in_pixels = Game_Map::GetTilesX() * TILE_SIZE;
-		if (map_width_in_pixels < Player::screen_width) {
+		if (map_width_in_pixels < Player::screen_width)
+		{
 			panorama->SetRenderOx((Player::screen_width - map_width_in_pixels) / 2);
 		}
 
 		int map_height_in_pixels = Game_Map::GetTilesY() * TILE_SIZE;
-		if (map_height_in_pixels < Player::screen_height) {
+		if (map_height_in_pixels < Player::screen_height)
+		{
 			panorama->SetRenderOy((Player::screen_height - map_height_in_pixels) / 2);
 		}
 	}
