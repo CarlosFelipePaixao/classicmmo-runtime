@@ -1,13 +1,17 @@
 #include "classicmmo_runtime.h"
 
+#include <ixwebsocket/IXNetSystem.h>
+
+#include <cstdlib>
 #include <iostream>
 
 namespace classicmmo {
-
 namespace {
-	NetworkClient g_network_client;
-	bool g_initialized = false;
-}
+
+NetworkClient g_network_client;
+bool g_initialized = false;
+
+} // namespace
 
 void ClassicMMORuntime::Initialize() {
 	if (g_initialized) {
@@ -16,7 +20,17 @@ void ClassicMMORuntime::Initialize() {
 
 	g_initialized = true;
 
+    ix::initNetSystem();
+
 	std::cout << "[ClassicMMO] Runtime initialized" << std::endl;
+
+	const char* server_url = std::getenv("CLASSICMMO_SERVER_URL");
+
+	if (server_url && server_url[0] != '\0') {
+		g_network_client.Connect(server_url);
+	} else {
+		std::cout << "[ClassicMMO] Network disabled. Set CLASSICMMO_SERVER_URL to connect." << std::endl;
+	}
 }
 
 void ClassicMMORuntime::Shutdown() {
@@ -24,9 +38,9 @@ void ClassicMMORuntime::Shutdown() {
 		return;
 	}
 
-	if (g_network_client.IsConnected()) {
-		g_network_client.Disconnect();
-	}
+	g_network_client.Disconnect();
+
+    ix::uninitNetSystem();
 
 	g_initialized = false;
 
