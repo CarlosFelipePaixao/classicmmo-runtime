@@ -16,6 +16,9 @@
  */
 
 // Headers
+#include "classicmmo/classicmmo_runtime.h"
+#include <algorithm>
+#include <unordered_set>
 #include "spriteset_map.h"
 #include "cache.h"
 #include "game_dynrpg.h"
@@ -31,6 +34,42 @@
 #include "player.h"
 #include "drawable_list.h"
 #include "map_data.h"
+
+namespace {
+
+int ClassicMMODirectionFromString(const std::string& direction) {
+	if (direction == "up") {
+		return Game_Character::Up;
+	}
+
+	if (direction == "right") {
+		return Game_Character::Right;
+	}
+
+	if (direction == "left") {
+		return Game_Character::Left;
+	}
+
+	return Game_Character::Down;
+}
+
+bool ClassicMMOTryParseMapId(const std::string& value, int& out_map_id) {
+	try {
+		size_t parsed = 0;
+		const int map_id = std::stoi(value, &parsed);
+
+		if (parsed != value.size()) {
+			return false;
+		}
+
+		out_map_id = map_id;
+		return true;
+	} catch (...) {
+		return false;
+	}
+}
+
+} // namespace
 
 Spriteset_Map::Spriteset_Map() {
 	panorama = std::make_unique<Plane>();
@@ -63,6 +102,7 @@ void Spriteset_Map::Refresh() {
 
 	airship_shadows.clear();
 	character_sprites.clear();
+	classicmmo_remote_players.clear();
 
 	ChipsetUpdated();
 
@@ -89,6 +129,8 @@ void Spriteset_Map::Update() {
 	tilemap->SetOx(Game_Map::GetDisplayX() / (SCREEN_TILE_SIZE / TILE_SIZE));
 	tilemap->SetOy(Game_Map::GetDisplayY() / (SCREEN_TILE_SIZE / TILE_SIZE));
 	tilemap->SetTone(new_tone);
+
+	SyncClassicMMORemotePlayers();
 
 	for (const auto& character_sprite : character_sprites) {
 		character_sprite->Update();
@@ -244,6 +286,89 @@ void Spriteset_Map::CreateSprite(Game_Character* character, bool create_x_clone,
 		add_sprite(std::make_unique<Sprite_Character>(character, -map_tiles_x, map_tiles_y));
 		add_sprite(std::make_unique<Sprite_Character>(character, map_tiles_x, -map_tiles_y));
 		add_sprite(std::make_unique<Sprite_Character>(character, -map_tiles_x, -map_tiles_y));
+	}
+}
+
+void Spriteset_Map::RemoveClassicMMOSpritesFor(Game_Character* character) {
+	character_sprites.erase(
+		std::remove_if(
+			character_sprites.begin(),
+			character_sprites.end(),
+			[character](const std::unique_ptr<Sprite_Character>& sprite) {
+				return sprite->GetCharacter() == character;
+			}
+		),
+		character_sprites.end()
+	);
+}
+
+void Spriteset_Map::SyncClassicMMORemotePlayers() {
+	auto remote_players = classicmmo::ClassicMMORuntime::GetNetworkClient().GetRemotePlayersSnapshot();
+
+	const int current_map_id = Game_Map::GetMapId();
+
+	std::unordered_set<std::string> visible_remote_ids;
+
+	for (const auto& remote_player : remote_players) {
+		int remote_map_id = 0;
+
+		if (!ClassicMMOTryParseMapId(remote_player.map_id, remote_map_id)) {
+			continue;
+		}
+
+		if (remote_map_id != current_map_id) {
+			continue;
+		}
+
+		visible_remote_ids.insert(remote_player.client_id);
+
+		const int direction = ClassicMMODirectionFromString(remote_player.direction);
+
+		auto it = classicmmo_remote_players.find(remote_player.client_id);
+
+		if (it == classicmmo_remote_players.end()) {
+			auto character = std::make_unique<Game_Player>();
+
+			character->SetMapId(remote_map_id);
+			character->SetX(remote_player.x);
+			character->SetY(remote_player.y);
+			character->SetDirection(direction);
+			character->SetFacing(direction);
+			character->SetThrough(true);
+
+			if (Main_Data::game_player) {
+				character->SetSpriteGraphic(
+					Main_Data::game_player->GetSpriteName(),
+					Main_Data::game_player->GetSpriteIndex()
+				);
+			}
+
+			Game_Character* character_ptr = character.get();
+
+			classicmmo_remote_players.emplace(remote_player.client_id, std::move(character));
+
+			CreateSprite(character_ptr, need_x_clone, need_y_clone);
+
+			continue;
+		}
+
+		Game_Player* character = it->second.get();
+
+		character->SetMapId(remote_map_id);
+		character->SetX(remote_player.x);
+		character->SetY(remote_player.y);
+		character->SetDirection(direction);
+		character->SetFacing(direction);
+	}
+
+	for (auto it = classicmmo_remote_players.begin(); it != classicmmo_remote_players.end();) {
+		if (visible_remote_ids.find(it->first) != visible_remote_ids.end()) {
+			++it;
+			continue;
+		}
+
+		RemoveClassicMMOSpritesFor(it->second.get());
+		it = classicmmo_remote_players.erase(it);
 	}
 }
 

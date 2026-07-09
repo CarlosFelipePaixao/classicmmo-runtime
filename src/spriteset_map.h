@@ -19,6 +19,8 @@
 #define EP_SPRITESET_MAP_H
 
 // Headers
+#include "game_player.h"
+#include <unordered_map>
 #include <string>
 #include "async_handler.h"
 #include "frame.h"
@@ -107,6 +109,7 @@ protected:
 	std::unique_ptr<Plane> panorama;
 	std::string panorama_name;
 	std::vector<std::unique_ptr<Sprite_Character>> character_sprites;
+	std::unordered_map<std::string, std::unique_ptr<Game_Player>> classicmmo_remote_players;
 	std::vector<std::unique_ptr<Sprite_AirshipShadow>> airship_shadows;
 	std::unique_ptr<Sprite_Timer> timer1;
 	std::unique_ptr<Sprite_Timer> timer2;
@@ -115,6 +118,9 @@ protected:
 
 	void CreateSprite(Game_Character* character, bool create_x_clone, bool create_y_clone);
 	void CreateAirshipShadowSprite(bool create_x_clone, bool create_y_clone);
+
+	void SyncClassicMMORemotePlayers();
+	void RemoveClassicMMOSpritesFor(Game_Character* character);
 
 	void OnTilemapSpriteReady(FileRequestResult*);
 	void OnPanoramaSpriteReady(FileRequestResult* result);
