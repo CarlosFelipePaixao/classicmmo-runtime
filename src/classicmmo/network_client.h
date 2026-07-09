@@ -3,10 +3,22 @@
 
 #include <ixwebsocket/IXWebSocket.h>
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace classicmmo {
+
+struct RemotePlayerState {
+	std::string client_id;
+	std::string map_id;
+	int x = 0;
+	int y = 0;
+	std::string direction = "down";
+};
 
 class NetworkClient {
 public:
@@ -27,12 +39,22 @@ public:
 		const std::string& direction
 	);
 
+	std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
+
 	void Update();
 
 private:
+	void HandleServerMessage(const std::string& raw_message);
+	void ApplyStateSnapshot(const std::vector<RemotePlayerState>& players);
+	void UpsertRemotePlayer(const RemotePlayerState& player);
+	void RemoveRemotePlayer(const std::string& client_id);
+
 	std::unique_ptr<ix::WebSocket> socket;
-	bool connected = false;
+	std::atomic_bool connected{false};
 	std::string url;
+
+	mutable std::mutex remote_players_mutex;
+	std::unordered_map<std::string, RemotePlayerState> remote_players;
 };
 
 } // namespace classicmmo
