@@ -383,22 +383,13 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 		{
 			auto character = std::make_unique<classicmmo::RemoteCharacter>();
 
-			std::string sprite_name;
-			int sprite_index = 0;
-
-			if (Main_Data::game_player)
-			{
-				sprite_name = Main_Data::game_player->GetSpriteName();
-				sprite_index = Main_Data::game_player->GetSpriteIndex();
-			}
-
 			character->ApplyNetworkState(
 				remote_map_id,
 				remote_player.x,
 				remote_player.y,
 				direction,
-				sprite_name,
-				sprite_index);
+				remote_player.sprite_name,
+				remote_player.sprite_index);
 
 			Game_Character *character_ptr = character.get();
 
@@ -411,22 +402,13 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 
 		classicmmo::RemoteCharacter *character = it->second.get();
 
-		std::string sprite_name;
-		int sprite_index = 0;
-
-		if (Main_Data::game_player)
-		{
-			sprite_name = Main_Data::game_player->GetSpriteName();
-			sprite_index = Main_Data::game_player->GetSpriteIndex();
-		}
-
 		character->ApplyNetworkState(
 			remote_map_id,
 			remote_player.x,
 			remote_player.y,
 			direction,
-			sprite_name,
-			sprite_index);
+			remote_player.sprite_name,
+			remote_player.sprite_index);
 	}
 
 	for (auto it = classicmmo_remote_players.begin(); it != classicmmo_remote_players.end();)
@@ -440,7 +422,7 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 		RemoveClassicMMOSpritesFor(it->second.get());
 		it = classicmmo_remote_players.erase(it);
 	}
-	
+
 	for (auto &entry : classicmmo_remote_players)
 	{
 		entry.second->UpdateVisualInterpolation();

@@ -10,52 +10,58 @@
 #include <unordered_map>
 #include <vector>
 
-namespace classicmmo {
+namespace classicmmo
+{
 
-struct RemotePlayerState {
-	std::string client_id;
-	std::string map_id;
-	int x = 0;
-	int y = 0;
-	std::string direction = "down";
-};
+	struct RemotePlayerState
+	{
+		std::string client_id;
+		std::string map_id;
+		int x = 0;
+		int y = 0;
+		std::string direction = "down";
+		std::string sprite_name;
+		int sprite_index = 0;
+	};
 
-class NetworkClient {
-public:
-	NetworkClient();
-	~NetworkClient();
+	class NetworkClient
+	{
+	public:
+		NetworkClient();
+		~NetworkClient();
 
-	bool Connect(const std::string& server_url);
-	void Disconnect();
+		bool Connect(const std::string &server_url);
+		void Disconnect();
 
-	bool IsConnected() const;
+		bool IsConnected() const;
 
-	void SendChat(const std::string& text);
+		void SendChat(const std::string &text);
 
-	void SendPosition(
-		const std::string& map_id,
-		int x,
-		int y,
-		const std::string& direction
-	);
+		void SendPosition(
+			const std::string &map_id,
+			int x,
+			int y,
+			const std::string &direction,
+			const std::string &sprite_name,
+			int sprite_index);
 
-	std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
+		std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
 
-	void Update();
+		void Update();
 
-private:
-	void HandleServerMessage(const std::string& raw_message);
-	void ApplyStateSnapshot(const std::vector<RemotePlayerState>& players);
-	void UpsertRemotePlayer(const RemotePlayerState& player);
-	void RemoveRemotePlayer(const std::string& client_id);
+	private:
+		void HandleServerMessage(const std::string &raw_message);
+		void ApplyStateSnapshot(const std::vector<RemotePlayerState> &players);
+		void UpsertRemotePlayer(const RemotePlayerState &player);
+		void RemoveRemotePlayer(const std::string &client_id);
 
-	std::unique_ptr<ix::WebSocket> socket;
-	std::atomic_bool connected{false};
-	std::string url;
+		std::unique_ptr<ix::WebSocket> socket;
+		std::atomic_bool connected{false};
+		std::string url;
 
-	mutable std::mutex remote_players_mutex;
-	std::unordered_map<std::string, RemotePlayerState> remote_players;
-};
+		mutable std::mutex remote_players_mutex;
+		std::unordered_map<std::string, RemotePlayerState> remote_players;
+	};
 
 } // namespace classicmmo
 

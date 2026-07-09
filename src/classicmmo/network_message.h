@@ -3,34 +3,39 @@
 
 #include <string>
 
-namespace classicmmo {
+namespace classicmmo
+{
 
-struct RemotePosition {
-	int x = 0;
-	int y = 0;
-	std::string map_id = "test_map";
-	std::string direction = "down";
-	std::string from;
-};
+	struct RemotePosition
+	{
+		std::string from;
+		std::string map_id = "test_map";
+		int x = 0;
+		int y = 0;
+		std::string direction = "down";
+		std::string sprite_name;
+		int sprite_index = 0;
+	};
 
-class NetworkMessage {
-public:
-	static std::string MakeChatMessage(const std::string& text);
+	class NetworkMessage
+	{
+	public:
+		static std::string MakeChatMessage(const std::string &text);
 
-	static std::string MakePositionMessage(
-		const std::string& map_id,
-		int x,
-		int y,
-		const std::string& direction
-	);
+		static std::string MakePositionMessage(
+			const std::string &map_id,
+			int x,
+			int y,
+			const std::string &direction,
+			const std::string &sprite_name,
+			int sprite_index);
 
-	static bool TryGetType(const std::string& raw_json, std::string& out_type);
+		static bool TryGetType(const std::string &raw_json, std::string &out_type);
 
-	static bool TryParsePosition(
-		const std::string& raw_json,
-		RemotePosition& out_position
-	);
-};
+		static bool TryParsePosition(
+			const std::string &raw_json,
+			RemotePosition &out_position);
+	};
 
 } // namespace classicmmo
 
