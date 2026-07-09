@@ -39,7 +39,8 @@ function getStateSnapshot(exceptClientId) {
       y: player.y,
       direction: player.direction,
       spriteName: player.spriteName,
-      spriteIndex: player.spriteIndex
+      spriteIndex: player.spriteIndex,
+      playerName: player.playerName
     });
   }
 
@@ -76,7 +77,8 @@ function readPositionMessage(message) {
     y,
     direction,
     spriteName: typeof message.spriteName === "string" ? message.spriteName : "",
-    spriteIndex: Number.isInteger(message.spriteIndex) ? message.spriteIndex : 0
+    spriteIndex: Number.isInteger(message.spriteIndex) ? message.spriteIndex : 0,
+    playerName: typeof message.playerName === "string" ? message.playerName : ""
   };
 }
 
@@ -144,7 +146,8 @@ server.on("connection", (socket) => {
         y: position.y,
         direction: position.direction,
         spriteName: position.spriteName,
-        spriteIndex: position.spriteIndex
+        spriteIndex: position.spriteIndex,
+        playerName: position.playerName
       };
 
       players.set(clientId, currentPlayer);
@@ -158,7 +161,8 @@ server.on("connection", (socket) => {
           y: currentPlayer.y,
           direction: currentPlayer.direction,
           spriteName: currentPlayer.spriteName,
-          spriteIndex: currentPlayer.spriteIndex
+          spriteIndex: currentPlayer.spriteIndex,
+          playerName: currentPlayer.playerName
         });
       }
 
@@ -170,9 +174,10 @@ server.on("connection", (socket) => {
         y: currentPlayer.y,
         direction: currentPlayer.direction,
         spriteName: currentPlayer.spriteName,
-        spriteIndex: currentPlayer.spriteIndex
+        spriteIndex: currentPlayer.spriteIndex,
+        playerName: currentPlayer.playerName
       });
-
+      
       return;
     }
 

@@ -3,183 +3,212 @@
 #include <algorithm>
 #include <cstdlib>
 
-namespace classicmmo {
-namespace {
-
-constexpr int kTilePixels = 16;
-
-// 2 pixels por frame = 8 frames para atravessar 1 tile de 16 px.
-constexpr int kVisualPixelsPerFrame = 2;
-
-// Troca o frame da perna a cada 2 updates.
-constexpr int kWalkingFrameTicks = 2;
-
-int MoveOffsetTowardZero(int value) {
-	if (value > 0) {
-		return std::max(0, value - kVisualPixelsPerFrame);
-	}
-
-	if (value < 0) {
-		return std::min(0, value + kVisualPixelsPerFrame);
-	}
-
-	return 0;
-}
-
-} // namespace
-
-RemoteCharacter::RemoteCharacter() :
-	RemoteCharacterBase(Game_Character::Event)
+namespace classicmmo
 {
-	SetThrough(true);
-	SetLayer(lcf::rpg::EventPage::Layers_same);
-	SetSpriteHidden(false);
-	SetIdleAnimationFrame();
-}
+    namespace
+    {
 
-void RemoteCharacter::ApplyNetworkState(
-	int map_id,
-	int x,
-	int y,
-	int direction,
-	const std::string& sprite_name,
-	int sprite_index
-) {
-	SetThrough(true);
+        constexpr int kTilePixels = 16;
 
-	if (!sprite_name.empty()) {
-		SetSpriteGraphic(sprite_name, sprite_index);
-	}
+        // 2 pixels por frame = 8 frames para atravessar 1 tile de 16 px.
+        constexpr int kVisualPixelsPerFrame = 2;
 
-	if (!has_spawned || GetMapId() != map_id) {
-		SetMapId(map_id);
-		SetX(x);
-		SetY(y);
-		SetDirection(direction);
-		SetFacing(direction);
-		ClearVisualOffset();
-		SetIdleAnimationFrame();
-		has_spawned = true;
-		return;
-	}
+        // Troca o frame da perna a cada 2 updates.
+        constexpr int kWalkingFrameTicks = 2;
 
-	// Importante:
-	// SyncClassicMMORemotePlayers chama ApplyNetworkState todo update.
-	// Se o servidor ainda está guardando o mesmo x/y, não podemos limpar o offset,
-	// senão a interpolação visual é cancelada e o personagem teleporta.
-	if (GetX() == x && GetY() == y) {
-		SetDirection(direction);
-		SetFacing(direction);
+        int MoveOffsetTowardZero(int value)
+        {
+            if (value > 0)
+            {
+                return std::max(0, value - kVisualPixelsPerFrame);
+            }
 
-		if (!IsVisuallyMoving()) {
-			SetIdleAnimationFrame();
-		}
+            if (value < 0)
+            {
+                return std::min(0, value + kVisualPixelsPerFrame);
+            }
 
-		return;
-	}
+            return 0;
+        }
 
-	const int old_x = GetX();
-	const int old_y = GetY();
+    } // namespace
 
-	const int dx = x - old_x;
-	const int dy = y - old_y;
+    RemoteCharacter::RemoteCharacter() : RemoteCharacterBase(Game_Character::Event)
+    {
+        SetThrough(true);
+        SetLayer(lcf::rpg::EventPage::Layers_same);
+        SetSpriteHidden(false);
+        SetIdleAnimationFrame();
+    }
 
-	SetMapId(map_id);
-	SetX(x);
-	SetY(y);
-	SetDirection(direction);
-	SetFacing(direction);
+    void RemoteCharacter::ApplyNetworkState(
+        int map_id,
+        int x,
+        int y,
+        int direction,
+        const std::string &sprite_name,
+        int sprite_index,
+        const std::string &new_player_name)
+    {
+        SetThrough(true);
 
-	const int distance = std::abs(dx) + std::abs(dy);
+        player_name = new_player_name;
 
-	if (distance == 1) {
-		const bool was_idle = !IsVisuallyMoving();
+        if (!sprite_name.empty())
+        {
+            SetSpriteGraphic(sprite_name, sprite_index);
+        }
 
-		visual_offset_x += (old_x - x) * kTilePixels;
-		visual_offset_y += (old_y - y) * kTilePixels;
+        if (!has_spawned || GetMapId() != map_id)
+        {
+            SetMapId(map_id);
+            SetX(x);
+            SetY(y);
+            SetDirection(direction);
+            SetFacing(direction);
+            ClearVisualOffset();
+            SetIdleAnimationFrame();
+            has_spawned = true;
+            return;
+        }
 
-		if (
-			std::abs(visual_offset_x) > kTilePixels ||
-			std::abs(visual_offset_y) > kTilePixels
-		) {
-			ClearVisualOffset();
-			SetIdleAnimationFrame();
-			return;
-		}
+        // Importante:
+        // SyncClassicMMORemotePlayers chama ApplyNetworkState todo update.
+        // Se o servidor ainda está guardando o mesmo x/y, não podemos limpar o offset,
+        // senão a interpolação visual é cancelada e o personagem teleporta.
+        if (GetX() == x && GetY() == y)
+        {
+            SetDirection(direction);
+            SetFacing(direction);
 
-		if (was_idle) {
-			walking_anim_tick = 0;
-		}
+            if (!IsVisuallyMoving())
+            {
+                SetIdleAnimationFrame();
+            }
 
-		SetWalkingAnimationFrame();
-		return;
-	}
+            return;
+        }
 
-	// Mudança grande demais: troca de mapa, correção, lag ou teleport real.
-	ClearVisualOffset();
-	SetIdleAnimationFrame();
-}
+        const int old_x = GetX();
+        const int old_y = GetY();
 
-void RemoteCharacter::UpdateVisualInterpolation() {
-	if (!IsVisuallyMoving()) {
-		SetIdleAnimationFrame();
-		return;
-	}
+        const int dx = x - old_x;
+        const int dy = y - old_y;
 
-	++walking_anim_tick;
-	SetWalkingAnimationFrame();
+        SetMapId(map_id);
+        SetX(x);
+        SetY(y);
+        SetDirection(direction);
+        SetFacing(direction);
 
-	visual_offset_x = MoveOffsetTowardZero(visual_offset_x);
-	visual_offset_y = MoveOffsetTowardZero(visual_offset_y);
+        const int distance = std::abs(dx) + std::abs(dy);
 
-	if (!IsVisuallyMoving()) {
-		SetIdleAnimationFrame();
-	}
-}
+        if (distance == 1)
+        {
+            const bool was_idle = !IsVisuallyMoving();
 
-int RemoteCharacter::GetVisualOffsetX() const {
-	return visual_offset_x;
-}
+            visual_offset_x += (old_x - x) * kTilePixels;
+            visual_offset_y += (old_y - y) * kTilePixels;
 
-int RemoteCharacter::GetVisualOffsetY() const {
-	return visual_offset_y;
-}
+            if (
+                std::abs(visual_offset_x) > kTilePixels ||
+                std::abs(visual_offset_y) > kTilePixels)
+            {
+                ClearVisualOffset();
+                SetIdleAnimationFrame();
+                return;
+            }
 
-void RemoteCharacter::ClearVisualOffset() {
-	visual_offset_x = 0;
-	visual_offset_y = 0;
-	walking_anim_tick = 0;
-}
+            if (was_idle)
+            {
+                walking_anim_tick = 0;
+            }
 
-void RemoteCharacter::SetIdleAnimationFrame() {
-	SetAnimFrame(lcf::rpg::EventPage::Frame_middle);
-}
+            SetWalkingAnimationFrame();
+            return;
+        }
 
-void RemoteCharacter::SetWalkingAnimationFrame() {
-	const int phase = (walking_anim_tick / kWalkingFrameTicks) % 4;
+        // Mudança grande demais: troca de mapa, correção, lag ou teleport real.
+        ClearVisualOffset();
+        SetIdleAnimationFrame();
+    }
 
-	switch (phase) {
-	case 0:
-		SetAnimFrame(lcf::rpg::EventPage::Frame_left);
-		break;
-	case 1:
-		SetAnimFrame(lcf::rpg::EventPage::Frame_middle);
-		break;
-	case 2:
-		SetAnimFrame(lcf::rpg::EventPage::Frame_right);
-		break;
-	default:
-		SetAnimFrame(lcf::rpg::EventPage::Frame_middle);
-		break;
-	}
-}
+    void RemoteCharacter::UpdateVisualInterpolation()
+    {
+        if (!IsVisuallyMoving())
+        {
+            SetIdleAnimationFrame();
+            return;
+        }
 
-bool RemoteCharacter::IsVisuallyMoving() const {
-	return visual_offset_x != 0 || visual_offset_y != 0;
-}
+        ++walking_anim_tick;
+        SetWalkingAnimationFrame();
 
-void RemoteCharacter::UpdateNextMovementAction() {
-	// Remote characters are driven by network state, not local movement AI.
-}
+        visual_offset_x = MoveOffsetTowardZero(visual_offset_x);
+        visual_offset_y = MoveOffsetTowardZero(visual_offset_y);
+
+        if (!IsVisuallyMoving())
+        {
+            SetIdleAnimationFrame();
+        }
+    }
+
+    int RemoteCharacter::GetVisualOffsetX() const
+    {
+        return visual_offset_x;
+    }
+
+    int RemoteCharacter::GetVisualOffsetY() const
+    {
+        return visual_offset_y;
+    }
+
+    const std::string &RemoteCharacter::GetPlayerName() const
+    {
+        return player_name;
+    }
+
+    void RemoteCharacter::ClearVisualOffset()
+    {
+        visual_offset_x = 0;
+        visual_offset_y = 0;
+        walking_anim_tick = 0;
+    }
+
+    void RemoteCharacter::SetIdleAnimationFrame()
+    {
+        SetAnimFrame(lcf::rpg::EventPage::Frame_middle);
+    }
+
+    void RemoteCharacter::SetWalkingAnimationFrame()
+    {
+        const int phase = (walking_anim_tick / kWalkingFrameTicks) % 4;
+
+        switch (phase)
+        {
+        case 0:
+            SetAnimFrame(lcf::rpg::EventPage::Frame_left);
+            break;
+        case 1:
+            SetAnimFrame(lcf::rpg::EventPage::Frame_middle);
+            break;
+        case 2:
+            SetAnimFrame(lcf::rpg::EventPage::Frame_right);
+            break;
+        default:
+            SetAnimFrame(lcf::rpg::EventPage::Frame_middle);
+            break;
+        }
+    }
+
+    bool RemoteCharacter::IsVisuallyMoving() const
+    {
+        return visual_offset_x != 0 || visual_offset_y != 0;
+    }
+
+    void RemoteCharacter::UpdateNextMovementAction()
+    {
+        // Remote characters are driven by network state, not local movement AI.
+    }
 
 } // namespace classicmmo

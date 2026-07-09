@@ -22,6 +22,7 @@ namespace classicmmo
 		std::string direction = "down";
 		std::string sprite_name;
 		int sprite_index = 0;
+		std::string player_name;
 	};
 
 	class NetworkClient
@@ -43,8 +44,9 @@ namespace classicmmo
 			int y,
 			const std::string &direction,
 			const std::string &sprite_name,
-			int sprite_index);
-
+			int sprite_index,
+			const std::string &player_name);
+			
 		std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
 
 		void Update();

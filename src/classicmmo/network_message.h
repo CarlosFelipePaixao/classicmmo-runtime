@@ -8,6 +8,7 @@ namespace classicmmo
 
 	struct RemotePosition
 	{
+		std::string player_name;
 		std::string from;
 		std::string map_id = "test_map";
 		int x = 0;
@@ -28,7 +29,8 @@ namespace classicmmo
 			int y,
 			const std::string &direction,
 			const std::string &sprite_name,
-			int sprite_index);
+			int sprite_index,
+			const std::string &player_name);
 
 		static bool TryGetType(const std::string &raw_json, std::string &out_type);
 

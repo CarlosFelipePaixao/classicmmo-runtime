@@ -16,6 +16,8 @@
  */
 
 // Headers
+#include "font.h"
+#include "text.h"
 #include "sprite_character.h"
 #include "cache.h"
 #include "game_map.h"
@@ -25,33 +27,34 @@
 
 #include "classicmmo/remote_character.h"
 
-Sprite_Character::Sprite_Character(Game_Character* character, int x_offset, int y_offset) :
-	character(character),
-	tile_id(-1),
-	character_index(0),
-	chara_width(0),
-	chara_height(0),
-	x_offset(x_offset),
-	y_offset(y_offset) {
+Sprite_Character::Sprite_Character(Game_Character *character, int x_offset, int y_offset) : character(character),
+																							tile_id(-1),
+																							character_index(0),
+																							chara_width(0),
+																							chara_height(0),
+																							x_offset(x_offset),
+																							y_offset(y_offset)
+{
 
 	Update();
 }
 
-void Sprite_Character::Draw(Bitmap &dst) {
-	if (UsesCharset()) {
+void Sprite_Character::Draw(Bitmap &dst)
+{
+	if (UsesCharset())
+	{
 		int row = character->GetFacing();
 		auto frame = character->GetAnimFrame();
 
-		if (frame >= lcf::rpg::EventPage::Frame_middle2) {
+		if (frame >= lcf::rpg::EventPage::Frame_middle2)
+		{
 			frame = lcf::rpg::EventPage::Frame_middle;
 		}
 
-		SetSrcRect({
-			frame * chara_width,
-			row * chara_height,
-			chara_width,
-			chara_height
-		});
+		SetSrcRect({frame * chara_width,
+					row * chara_height,
+					chara_width,
+					chara_height});
 	}
 
 	SetFlashEffect(character->GetFlashColor());
@@ -61,7 +64,8 @@ void Sprite_Character::Draw(Bitmap &dst) {
 	int screen_x = character->GetScreenX() + x_offset;
 	int screen_y = character->GetScreenY() + y_offset;
 
-	if (auto* remote_character = dynamic_cast<classicmmo::RemoteCharacter*>(character)) {
+	if (auto *remote_character = dynamic_cast<classicmmo::RemoteCharacter *>(character))
+	{
 		screen_x += remote_character->GetVisualOffsetX();
 		screen_y += remote_character->GetVisualOffsetY();
 	}
@@ -73,31 +77,55 @@ void Sprite_Character::Draw(Bitmap &dst) {
 	SetBushDepth(bush_split > 3 ? 0 : GetHeight() / bush_split);
 
 	Sprite::Draw(dst);
+
+	if (auto *remote_character = dynamic_cast<classicmmo::RemoteCharacter *>(character))
+	{
+		const std::string &player_name = remote_character->GetPlayerName();
+
+		if (!player_name.empty())
+		{
+			const auto font = Font::DefaultBitmapFont();
+			const Rect text_rect = Text::GetSize(*font, player_name);
+
+			const int name_x = screen_x - (text_rect.width / 2);
+			const int name_y = screen_y - chara_height - 12;
+
+			Text::Draw(dst, name_x + 1, name_y + 1, *font, Color(0, 0, 0, 255), player_name);
+			Text::Draw(dst, name_x, name_y, *font, Color(255, 255, 255, 255), player_name);
+		}
+	}
 }
 
-void Sprite_Character::Update() {
+void Sprite_Character::Update()
+{
 	if (tile_id != character->GetTileId() ||
 		character_name != character->GetSpriteName() ||
 		character_index != character->GetSpriteIndex() ||
-		refresh_bitmap
-	) {
+		refresh_bitmap)
+	{
 		tile_id = character->GetTileId();
 		character_name = character->GetSpriteName();
 		character_index = character->GetSpriteIndex();
 		refresh_bitmap = false;
 
-		if (UsesCharset()) {
-			FileRequestAsync* char_request = AsyncHandler::RequestFile("CharSet", character_name);
+		if (UsesCharset())
+		{
+			FileRequestAsync *char_request = AsyncHandler::RequestFile("CharSet", character_name);
 			char_request->SetGraphicFile(true);
 			request_id = char_request->Bind(&Sprite_Character::OnCharSpriteReady, this);
 			char_request->Start();
-		} else {
+		}
+		else
+		{
 			const auto chipset_name = Game_Map::GetChipsetName();
 
-			if (chipset_name.empty()) {
+			if (chipset_name.empty())
+			{
 				OnTileSpriteReady(nullptr);
-			} else {
-				FileRequestAsync* tile_request = AsyncHandler::RequestFile("ChipSet", Game_Map::GetChipsetName());
+			}
+			else
+			{
+				FileRequestAsync *tile_request = AsyncHandler::RequestFile("ChipSet", Game_Map::GetChipsetName());
 				tile_request->SetGraphicFile(true);
 				request_id = tile_request->Bind(&Sprite_Character::OnTileSpriteReady, this);
 				tile_request->Start();
@@ -109,47 +137,57 @@ void Sprite_Character::Update() {
 	SetZ(character->GetScreenZ(x_offset, y_offset));
 }
 
-Game_Character* Sprite_Character::GetCharacter() {
+Game_Character *Sprite_Character::GetCharacter()
+{
 	return character;
 }
 
-void Sprite_Character::SetCharacter(Game_Character* new_character) {
+void Sprite_Character::SetCharacter(Game_Character *new_character)
+{
 	character = new_character;
 }
 
-bool Sprite_Character::UsesCharset() const {
+bool Sprite_Character::UsesCharset() const
+{
 	return !character_name.empty();
 }
 
-void Sprite_Character::OnTileSpriteReady(FileRequestResult*) {
+void Sprite_Character::OnTileSpriteReady(FileRequestResult *)
+{
 	const auto chipset = Game_Map::GetChipsetName();
 
 	BitmapRef tile;
 
-	if (!chipset.empty()) {
+	if (!chipset.empty())
+	{
 		tile = Cache::Tile(Game_Map::GetChipsetName(), tile_id);
-	} else {
+	}
+	else
+	{
 		tile = Bitmap::Create(16, 16, true);
 	}
 
 	SetBitmap(tile);
 
-	SetSrcRect({ 0, 0, TILE_SIZE, TILE_SIZE });
+	SetSrcRect({0, 0, TILE_SIZE, TILE_SIZE});
 	SetOx(8);
 	SetOy(16);
 
 	Update();
 }
 
-void Sprite_Character::ChipsetUpdated() {
-	if (UsesCharset()) {
+void Sprite_Character::ChipsetUpdated()
+{
+	if (UsesCharset())
+	{
 		return;
 	}
 
 	refresh_bitmap = true;
 }
 
-Rect Sprite_Character::GetCharacterRect(std::string_view name, int index, const Rect bitmap_rect) {
+Rect Sprite_Character::GetCharacterRect(std::string_view name, int index, const Rect bitmap_rect)
+{
 	Rect rect;
 
 	rect.width = 24 * (TILE_SIZE / 16) * 3;
@@ -159,14 +197,17 @@ Rect Sprite_Character::GetCharacterRect(std::string_view name, int index, const 
 	// when the character name starts with a $ sign.
 	// This is not exactly the VX Ace way because
 	// VX Ace uses a single 1x1 spriteset of 3x4 sprites.
-	if (!name.empty() && name.front() == '$') {
-		if (!Player::HasEasyRpgExtensions()) {
+	if (!name.empty() && name.front() == '$')
+	{
+		if (!Player::HasEasyRpgExtensions())
+		{
 			Output::Debug(
 				"Ignoring large charset {}.\n"
 				"EasyRPG Extension not enabled.",
-				name
-			);
-		} else {
+				name);
+		}
+		else
+		{
 			rect.width = bitmap_rect.width * (TILE_SIZE / 16) / 4;
 			rect.height = bitmap_rect.height * (TILE_SIZE / 16) / 2;
 		}
@@ -178,7 +219,8 @@ Rect Sprite_Character::GetCharacterRect(std::string_view name, int index, const 
 	return rect;
 }
 
-void Sprite_Character::OnCharSpriteReady(FileRequestResult*) {
+void Sprite_Character::OnCharSpriteReady(FileRequestResult *)
+{
 	SetBitmap(Cache::Charset(character_name));
 
 	auto rect = GetCharacterRect(character_name, character_index, GetBitmap()->GetRect());

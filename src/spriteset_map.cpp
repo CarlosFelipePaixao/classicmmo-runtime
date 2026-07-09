@@ -389,7 +389,8 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 				remote_player.y,
 				direction,
 				remote_player.sprite_name,
-				remote_player.sprite_index);
+				remote_player.sprite_index,
+				remote_player.player_name);
 
 			Game_Character *character_ptr = character.get();
 
@@ -408,7 +409,8 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 			remote_player.y,
 			direction,
 			remote_player.sprite_name,
-			remote_player.sprite_index);
+			remote_player.sprite_index,
+			remote_player.player_name);
 	}
 
 	for (auto it = classicmmo_remote_players.begin(); it != classicmmo_remote_players.end();)

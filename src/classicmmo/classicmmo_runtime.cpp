@@ -128,13 +128,21 @@ namespace classicmmo
 
 			sprite_index = GetEnvInt("CLASSICMMO_SPRITE_INDEX", sprite_index);
 
+			std::string player_name = GetEnvString("CLASSICMMO_PLAYER_NAME");
+
+			if (player_name.empty())
+			{
+				player_name = "Player";
+			}
+
 			g_network_client.SendPosition(
 				std::to_string(map_id),
 				x,
 				y,
 				DirectionToString(direction),
 				sprite_name,
-				sprite_index);
+				sprite_index,
+				player_name);
 		}
 
 	} // namespace

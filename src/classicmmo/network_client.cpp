@@ -83,6 +83,14 @@ namespace classicmmo
 			{
 				out_player.sprite_index = 0;
 			}
+			if (message.contains("playerName") && message["playerName"].is_string())
+			{
+				out_player.player_name = message["playerName"].get<std::string>();
+			}
+			else
+			{
+				out_player.player_name.clear();
+			}
 
 			return true;
 		}
@@ -184,7 +192,8 @@ namespace classicmmo
 		int y,
 		const std::string &direction,
 		const std::string &sprite_name,
-		int sprite_index)
+		int sprite_index,
+		const std::string &player_name)
 	{
 		if (!socket || !connected.load())
 		{
@@ -197,7 +206,8 @@ namespace classicmmo
 			y,
 			direction,
 			sprite_name,
-			sprite_index);
+			sprite_index,
+			player_name);
 
 		socket->sendText(message);
 

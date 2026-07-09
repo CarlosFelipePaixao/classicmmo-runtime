@@ -7,43 +7,48 @@
 
 #include <string>
 
-namespace classicmmo {
+namespace classicmmo
+{
 
-using RemoteCharacterBase = Game_CharacterDataStorage<lcf::rpg::SaveMapEventBase>;
+    using RemoteCharacterBase = Game_CharacterDataStorage<lcf::rpg::SaveMapEventBase>;
 
-class RemoteCharacter final : public RemoteCharacterBase {
-public:
-	RemoteCharacter();
+    class RemoteCharacter final : public RemoteCharacterBase
+    {
+    public:
+        RemoteCharacter();
 
-	void ApplyNetworkState(
-		int map_id,
-		int x,
-		int y,
-		int direction,
-		const std::string& sprite_name,
-		int sprite_index
-	);
+        void ApplyNetworkState(
+            int map_id,
+            int x,
+            int y,
+            int direction,
+            const std::string &sprite_name,
+            int sprite_index,
+            const std::string &player_name);
 
-	void UpdateVisualInterpolation();
+        void UpdateVisualInterpolation();
 
-	int GetVisualOffsetX() const;
-	int GetVisualOffsetY() const;
+        int GetVisualOffsetX() const;
+        int GetVisualOffsetY() const;
 
-	void UpdateNextMovementAction() override;
+        const std::string &GetPlayerName() const;
 
-private:
-	int visual_offset_x = 0;
-	int visual_offset_y = 0;
+        void UpdateNextMovementAction() override;
 
-	bool has_spawned = false;
+    private:
+        int visual_offset_x = 0;
+        int visual_offset_y = 0;
 
-	int walking_anim_tick = 0;
+        bool has_spawned = false;
 
-	void ClearVisualOffset();
-	void SetIdleAnimationFrame();
-	void SetWalkingAnimationFrame();
-	bool IsVisuallyMoving() const;
-};
+        int walking_anim_tick = 0;
+        std::string player_name;
+
+        void ClearVisualOffset();
+        void SetIdleAnimationFrame();
+        void SetWalkingAnimationFrame();
+        bool IsVisuallyMoving() const;
+    };
 
 } // namespace classicmmo
 

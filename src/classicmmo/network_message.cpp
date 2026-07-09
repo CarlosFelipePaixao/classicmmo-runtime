@@ -23,7 +23,8 @@ namespace classicmmo
 		int y,
 		const std::string &direction,
 		const std::string &sprite_name,
-		int sprite_index)
+		int sprite_index,
+		const std::string &player_name)
 	{
 		json message;
 
@@ -34,6 +35,7 @@ namespace classicmmo
 		message["direction"] = direction;
 		message["spriteName"] = sprite_name;
 		message["spriteIndex"] = sprite_index;
+		message["playerName"] = player_name;
 
 		return message.dump();
 	}
@@ -93,6 +95,14 @@ namespace classicmmo
 			else
 			{
 				out_position.sprite_index = 0;
+			}
+			if (message.contains("playerName") && message["playerName"].is_string())
+			{
+				out_position.player_name = message["playerName"].get<std::string>();
+			}
+			else
+			{
+				out_position.player_name.clear();
 			}
 
 			return true;
