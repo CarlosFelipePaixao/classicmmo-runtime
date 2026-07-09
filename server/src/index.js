@@ -26,16 +26,6 @@ function broadcast(senderId, message) {
   }
 }
 
-function createPlayerState(clientId) {
-  return {
-    clientId,
-    mapId: "test_map",
-    x: 0,
-    y: 0,
-    direction: "down"
-  };
-}
-
 function getStateSnapshot(exceptClientId) {
   const snapshot = [];
 
@@ -64,12 +54,32 @@ function normalizeDirection(direction) {
   return "down";
 }
 
+function readPositionMessage(message) {
+  const mapId = String(message.mapId || "");
+  const x = Number(message.x);
+  const y = Number(message.y);
+  const direction = normalizeDirection(message.direction);
+
+  if (!mapId) {
+    return null;
+  }
+
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return {
+    mapId,
+    x,
+    y,
+    direction
+  };
+}
+
 server.on("connection", (socket) => {
   const clientId = crypto.randomUUID();
-  const player = createPlayerState(clientId);
 
   clients.set(clientId, socket);
-  players.set(clientId, player);
 
   console.log(`[connect] ${clientId}`);
 
@@ -81,11 +91,6 @@ server.on("connection", (socket) => {
   send(socket, {
     type: "state_snapshot",
     players: getStateSnapshot(clientId)
-  });
-
-  broadcast(clientId, {
-    type: "player_joined",
-    clientId
   });
 
   socket.on("message", (raw) => {
@@ -115,21 +120,39 @@ server.on("connection", (socket) => {
     }
 
     if (message.type === "position") {
-      const currentPlayer = players.get(clientId);
+      const position = readPositionMessage(message);
 
-      if (!currentPlayer) {
+      if (!position) {
         send(socket, {
           type: "error",
-          message: "Player state not found"
+          message: "Invalid position message"
         });
 
         return;
       }
 
-      currentPlayer.mapId = String(message.mapId || "test_map");
-      currentPlayer.x = Number(message.x || 0);
-      currentPlayer.y = Number(message.y || 0);
-      currentPlayer.direction = normalizeDirection(message.direction);
+      const hadPlayerState = players.has(clientId);
+
+      const currentPlayer = {
+        clientId,
+        mapId: position.mapId,
+        x: position.x,
+        y: position.y,
+        direction: position.direction
+      };
+
+      players.set(clientId, currentPlayer);
+
+      if (!hadPlayerState) {
+        broadcast(clientId, {
+          type: "player_joined",
+          clientId,
+          mapId: currentPlayer.mapId,
+          x: currentPlayer.x,
+          y: currentPlayer.y,
+          direction: currentPlayer.direction
+        });
+      }
 
       broadcast(clientId, {
         type: "position",
@@ -150,15 +173,19 @@ server.on("connection", (socket) => {
   });
 
   socket.on("close", () => {
+    const hadPlayerState = players.has(clientId);
+
     clients.delete(clientId);
     players.delete(clientId);
 
     console.log(`[disconnect] ${clientId}`);
 
-    broadcast(clientId, {
-      type: "player_left",
-      clientId
-    });
+    if (hadPlayerState) {
+      broadcast(clientId, {
+        type: "player_left",
+        clientId
+      });
+    }
   });
 });
 
