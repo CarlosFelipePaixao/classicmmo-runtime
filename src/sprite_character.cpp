@@ -98,15 +98,29 @@ void Sprite_Character::Draw(Bitmap &dst)
 
 	if (auto *remote_character = dynamic_cast<classicmmo::RemoteCharacter *>(character))
 	{
+		const auto font = Font::DefaultBitmapFont();
+
+		const std::string chat_text = ClassicMMOClampName(remote_character->GetChatText());
 		const std::string player_name = ClassicMMOClampName(remote_character->GetPlayerName());
+
+		const int name_y = screen_y - chara_height - 5;
+
+		if (!chat_text.empty())
+		{
+			const Rect chat_rect = Text::GetSize(*font, chat_text);
+
+			const int chat_x = screen_x - (chat_rect.width / 2);
+			const int chat_y = name_y - 13;
+
+			Text::Draw(dst, chat_x + 1, chat_y + 1, *font, Color(0, 0, 0, 255), chat_text);
+			Text::Draw(dst, chat_x, chat_y, *font, Color(255, 255, 180, 255), chat_text);
+		}
 
 		if (!player_name.empty())
 		{
-			const auto font = Font::DefaultBitmapFont();
-			const Rect text_rect = Text::GetSize(*font, player_name);
+			const Rect name_rect = Text::GetSize(*font, player_name);
 
-			const int name_x = screen_x - (text_rect.width / 2);
-			const int name_y = screen_y - chara_height - 5;
+			const int name_x = screen_x - (name_rect.width / 2);
 
 			Text::Draw(dst, name_x + 1, name_y + 1, *font, Color(0, 0, 0, 255), player_name);
 			Text::Draw(dst, name_x, name_y, *font, Color(255, 255, 255, 255), player_name);

@@ -28,6 +28,19 @@ namespace classicmmo
 			}
 		}
 
+		constexpr int kChatBubbleFrames = 180;
+		constexpr std::size_t kMaxChatBubbleLength = 28;
+
+		std::string ClampChatBubbleText(const std::string &text)
+		{
+			if (text.size() <= kMaxChatBubbleLength)
+			{
+				return text;
+			}
+
+			return text.substr(0, kMaxChatBubbleLength - 3) + "...";
+		}
+
 		std::string NormalizeDirection(const std::string &direction)
 		{
 			if (
@@ -340,6 +353,14 @@ namespace classicmmo
 
 		if (type == "chat")
 		{
+			const std::string from = message.value("from", "");
+			const std::string text = message.value("text", "");
+
+			if (!from.empty() && !text.empty())
+			{
+				ApplyRemoteChat(from, text);
+			}
+
 			ClassicLog("[ClassicMMO] Received chat: " + raw_message);
 			return;
 		}
@@ -369,7 +390,32 @@ namespace classicmmo
 	{
 		std::lock_guard<std::mutex> lock(remote_players_mutex);
 
-		remote_players[player.client_id] = player;
+		RemotePlayerState next_player = player;
+
+		const auto it = remote_players.find(player.client_id);
+
+		if (it != remote_players.end())
+		{
+			next_player.chat_text = it->second.chat_text;
+			next_player.chat_timer = it->second.chat_timer;
+		}
+
+		remote_players[player.client_id] = next_player;
+	}
+
+	void NetworkClient::ApplyRemoteChat(const std::string &client_id, const std::string &text)
+	{
+		std::lock_guard<std::mutex> lock(remote_players_mutex);
+
+		const auto it = remote_players.find(client_id);
+
+		if (it == remote_players.end())
+		{
+			return;
+		}
+
+		it->second.chat_text = ClampChatBubbleText(text);
+		it->second.chat_timer = kChatBubbleFrames;
 	}
 
 	void NetworkClient::RemoveRemotePlayer(const std::string &client_id)
@@ -381,8 +427,24 @@ namespace classicmmo
 
 	void NetworkClient::Update()
 	{
-		// IXWebSocket runs callbacks on its own internal thread.
-		// Future: use GetRemotePlayersSnapshot() from the game/rendering layer.
+		std::lock_guard<std::mutex> lock(remote_players_mutex);
+
+		for (auto &entry : remote_players)
+		{
+			auto &player = entry.second;
+
+			if (player.chat_timer <= 0)
+			{
+				continue;
+			}
+
+			--player.chat_timer;
+
+			if (player.chat_timer <= 0)
+			{
+				player.chat_text.clear();
+			}
+		}
 	}
 
 } // namespace classicmmo

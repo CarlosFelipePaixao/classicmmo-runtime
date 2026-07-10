@@ -390,8 +390,8 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 				direction,
 				remote_player.sprite_name,
 				remote_player.sprite_index,
-				remote_player.player_name);
-
+				remote_player.player_name,
+				remote_player.chat_text);
 			Game_Character *character_ptr = character.get();
 
 			classicmmo_remote_players.emplace(remote_player.client_id, std::move(character));
@@ -410,7 +410,8 @@ void Spriteset_Map::SyncClassicMMORemotePlayers()
 			direction,
 			remote_player.sprite_name,
 			remote_player.sprite_index,
-			remote_player.player_name);
+			remote_player.player_name,
+			remote_player.chat_text);
 	}
 
 	for (auto it = classicmmo_remote_players.begin(); it != classicmmo_remote_players.end();)

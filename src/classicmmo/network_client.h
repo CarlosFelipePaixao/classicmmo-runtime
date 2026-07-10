@@ -23,6 +23,8 @@ namespace classicmmo
 		std::string sprite_name;
 		int sprite_index = 0;
 		std::string player_name;
+		std::string chat_text;
+		int chat_timer = 0;
 	};
 
 	class NetworkClient
@@ -46,7 +48,7 @@ namespace classicmmo
 			const std::string &sprite_name,
 			int sprite_index,
 			const std::string &player_name);
-			
+
 		std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
 
 		void Update();
@@ -56,6 +58,7 @@ namespace classicmmo
 		void ApplyStateSnapshot(const std::vector<RemotePlayerState> &players);
 		void UpsertRemotePlayer(const RemotePlayerState &player);
 		void RemoveRemotePlayer(const std::string &client_id);
+		void ApplyRemoteChat(const std::string &client_id, const std::string &text);
 
 		std::unique_ptr<ix::WebSocket> socket;
 		std::atomic_bool connected{false};

@@ -16,6 +16,7 @@ namespace classicmmo
 
 		NetworkClient g_network_client;
 		bool g_initialized = false;
+		bool g_sent_test_chat = false;
 
 		int g_last_map_id = -1;
 		int g_last_x = -1;
@@ -70,6 +71,24 @@ namespace classicmmo
 			}
 		}
 
+		void SendDevTestChatIfConfigured(bool allow_send)
+		{
+			if (!allow_send || g_sent_test_chat)
+			{
+				return;
+			}
+
+			const std::string text = GetEnvString("CLASSICMMO_TEST_CHAT_TEXT");
+
+			if (text.empty())
+			{
+				return;
+			}
+
+			g_network_client.SendChat(text);
+			g_sent_test_chat = true;
+		}
+
 		void ResetLastPlayerPosition()
 		{
 			g_last_map_id = -1;
@@ -101,6 +120,8 @@ namespace classicmmo
 			const int x = Main_Data::game_player->GetX();
 			const int y = Main_Data::game_player->GetY();
 			const int direction = Main_Data::game_player->GetDirection();
+
+			const bool had_previous_position = g_last_map_id != -1;
 
 			if (
 				map_id == g_last_map_id &&
@@ -143,6 +164,8 @@ namespace classicmmo
 				sprite_name,
 				sprite_index,
 				player_name);
+
+			SendDevTestChatIfConfigured(had_previous_position);
 		}
 
 	} // namespace
@@ -158,6 +181,7 @@ namespace classicmmo
 
 		ix::initNetSystem();
 		ResetLastPlayerPosition();
+		g_sent_test_chat = false;
 
 		std::cout << "[ClassicMMO] Runtime initialized" << std::endl;
 
@@ -184,6 +208,7 @@ namespace classicmmo
 
 		ix::uninitNetSystem();
 		ResetLastPlayerPosition();
+		g_sent_test_chat = false;
 
 		g_initialized = false;
 

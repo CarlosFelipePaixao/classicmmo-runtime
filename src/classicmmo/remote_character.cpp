@@ -48,11 +48,13 @@ namespace classicmmo
         int direction,
         const std::string &sprite_name,
         int sprite_index,
-        const std::string &new_player_name)
+        const std::string &new_player_name,
+        const std::string &new_chat_text)
     {
         SetThrough(true);
 
         player_name = new_player_name;
+        chat_text = new_chat_text;
 
         if (!sprite_name.empty())
         {
@@ -168,6 +170,11 @@ namespace classicmmo
         return player_name;
     }
 
+    const std::string &RemoteCharacter::GetChatText() const
+    {
+        return chat_text;
+    }
+    
     void RemoteCharacter::ClearVisualOffset()
     {
         visual_offset_x = 0;

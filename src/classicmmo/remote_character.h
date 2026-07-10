@@ -24,7 +24,8 @@ namespace classicmmo
             int direction,
             const std::string &sprite_name,
             int sprite_index,
-            const std::string &player_name);
+            const std::string &player_name,
+            const std::string &chat_text);
 
         void UpdateVisualInterpolation();
 
@@ -32,6 +33,7 @@ namespace classicmmo
         int GetVisualOffsetY() const;
 
         const std::string &GetPlayerName() const;
+        const std::string& GetChatText() const;
 
         void UpdateNextMovementAction() override;
 
@@ -43,6 +45,7 @@ namespace classicmmo
 
         int walking_anim_tick = 0;
         std::string player_name;
+        std::string chat_text;
 
         void ClearVisualOffset();
         void SetIdleAnimationFrame();
