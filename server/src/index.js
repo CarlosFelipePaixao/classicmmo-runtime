@@ -1,9 +1,12 @@
 const crypto = require("crypto");
 const WebSocket = require("ws");
 
-const PORT = 7777;
+const PORT = Number(process.env.PORT || 7777);
 
-const server = new WebSocket.Server({ port: PORT });
+const server = new WebSocket.Server({
+  port: PORT,
+  host: "0.0.0.0"
+});
 
 const clients = new Map();
 const players = new Map();
@@ -177,7 +180,7 @@ server.on("connection", (socket) => {
         spriteIndex: currentPlayer.spriteIndex,
         playerName: currentPlayer.playerName
       });
-      
+
       return;
     }
 
@@ -204,4 +207,4 @@ server.on("connection", (socket) => {
   });
 });
 
-console.log(`ClassicMMO server listening on ws://localhost:${PORT}`);
+console.log(`ClassicMMO server listening on ws://0.0.0.0:${PORT}`);
