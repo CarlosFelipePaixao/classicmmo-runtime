@@ -932,12 +932,17 @@ endif()
 # PNG pulls in zlib which has a broken config when not both static and shared library are installed
 player_find_package(NAME PNG TARGET PNG::PNG REQUIRED CONFIG_BROKEN)
 player_find_package(NAME fmt TARGET fmt::fmt VERSION 5.2 REQUIRED)
-player_find_package(NAME ixwebsocket TARGET ixwebsocket::ixwebsocket REQUIRED)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    player_find_package(NAME ixwebsocket TARGET ixwebsocket::ixwebsocket REQUIRED)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC CLASSICMMO_HAS_IXWEBSOCKET=1)
+endif()
 
 # Do not use player_find_package. enable_language used by pixman on Android does not work properly inside functions
 find_package(Pixman REQUIRED)
 target_link_libraries(${PROJECT_NAME} PIXMAN::PIXMAN)
-target_link_libraries(${PROJECT_NAME} ixwebsocket::ixwebsocket)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    target_link_libraries(${PROJECT_NAME} ixwebsocket::ixwebsocket)
+endif()
 
 if(WIN32)
 	target_link_libraries(${PROJECT_NAME} bcrypt)
@@ -1254,7 +1259,7 @@ if(PLAYER_BUILD_EXECUTABLE AND ${PLAYER_TARGET_PLATFORM} MATCHES "^SDL.*$" AND N
 		set(PLAYER_JS_SHELL "${CMAKE_CURRENT_SOURCE_DIR}/resources/emscripten/emscripten-shell.html")
 
 		set_property(TARGET ${EXE_NAME} PROPERTY LINK_FLAGS
-			"-sALLOW_MEMORY_GROWTH -sMINIFY_HTML=0 -sMODULARIZE -sEXPORT_NAME=createEasyRpgPlayer \
+			"-sALLOW_MEMORY_GROWTH -sTEXTDECODER=1 -sGROWABLE_ARRAYBUFFERS=0 -lwebsocket.js -sMINIFY_HTML=0 -sMODULARIZE -sEXPORT_NAME=createEasyRpgPlayer \
 			 -sEXIT_RUNTIME=0 --bind --pre-js ${PLAYER_JS_PREJS} --post-js ${PLAYER_JS_POSTJS} \
 			 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=['$autoResumeAudioContext','$dynCall'] \
 			 -sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8'] \

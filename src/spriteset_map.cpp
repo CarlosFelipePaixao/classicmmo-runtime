@@ -17,6 +17,9 @@
 
 // Headers
 #include "classicmmo/classicmmo_runtime.h"
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <algorithm>
 #include <unordered_set>
 #include "spriteset_map.h"
@@ -59,25 +62,25 @@ namespace
 	}
 
 	bool ClassicMMOTryParseMapId(const std::string &value, int &out_map_id)
-	{
-		try
-		{
-			size_t parsed = 0;
-			const int map_id = std::stoi(value, &parsed);
+        {
+                if (value.empty())
+                {
+                        return false;
+                }
 
-			if (parsed != value.size())
-			{
-				return false;
-			}
+                char *end = nullptr;
+                errno = 0;
 
-			out_map_id = map_id;
-			return true;
-		}
-		catch (...)
-		{
-			return false;
-		}
-	}
+                const long parsed = std::strtol(value.c_str(), &end, 10);
+
+                if (end == value.c_str() || *end != '\0' || errno == ERANGE || parsed < INT_MIN || parsed > INT_MAX)
+                {
+                        return false;
+                }
+
+                out_map_id = static_cast<int>(parsed);
+                return true;
+        }
 
 } // namespace
 

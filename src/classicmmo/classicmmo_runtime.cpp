@@ -3,11 +3,40 @@
 #include "game_player.h"
 #include "main_data.h"
 
+#if defined(CLASSICMMO_HAS_IXWEBSOCKET)
 #include <ixwebsocket/IXNetSystem.h>
+#endif
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+#endif
+
+#include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+
+#if defined(__EMSCRIPTEN__)
+EM_JS(char *, ClassicMMOGetQueryParam, (const char *key_ptr), {
+        if (typeof window === 'undefined' || !window.location) {
+                return 0;
+        }
+
+        var key = UTF8ToString(key_ptr);
+        var params = new URLSearchParams(window.location.search);
+        var value = params.get(key);
+
+        if (!value) {
+                return 0;
+        }
+
+        var length = lengthBytesUTF8(value) + 1;
+        var ptr = _malloc(length);
+        stringToUTF8(value, ptr, length);
+        return ptr;
+});
+#endif
 
 namespace classicmmo
 {
@@ -40,36 +69,112 @@ namespace classicmmo
 			}
 		}
 
-		std::string GetEnvString(const char *name)
-		{
-			const char *value = std::getenv(name);
+#if defined(__EMSCRIPTEN__)
+                std::string GetWebQueryParamName(const char *name)
+                {
+                        const std::string env_name = name ? name : "";
 
-			if (!value)
-			{
-				return "";
-			}
+                        if (env_name == "CLASSICMMO_SERVER_URL")
+                        {
+                                return "server";
+                        }
 
-			return std::string(value);
-		}
+                        if (env_name == "CLASSICMMO_PLAYER_NAME")
+                        {
+                                return "name";
+                        }
 
-		int GetEnvInt(const char *name, int fallback)
-		{
-			const char *value = std::getenv(name);
+                        if (env_name == "CLASSICMMO_SPRITE_NAME")
+                        {
+                                return "sprite";
+                        }
 
-			if (!value)
-			{
-				return fallback;
-			}
+                        if (env_name == "CLASSICMMO_SPRITE_INDEX")
+                        {
+                                return "spriteIndex";
+                        }
 
-			try
-			{
-				return std::stoi(value);
-			}
-			catch (...)
-			{
-				return fallback;
-			}
-		}
+                        if (env_name == "CLASSICMMO_TEST_CHAT_TEXT")
+                        {
+                                return "chat";
+                        }
+
+                        return "";
+                }
+
+                std::string GetWebQueryParamString(const char *name)
+                {
+                        const std::string param_name = GetWebQueryParamName(name);
+
+                        if (param_name.empty())
+                        {
+                                return "";
+                        }
+
+                        char *value = ClassicMMOGetQueryParam(param_name.c_str());
+
+                        if (!value)
+                        {
+                                return "";
+                        }
+
+                        const std::string result(value);
+                        std::free(value);
+
+                        return result;
+                }
+#endif
+
+                std::string GetEnvString(const char *name)
+                {
+                        const char *value = std::getenv(name);
+
+                        if (value && value[0] != '\0')
+                        {
+                                return std::string(value);
+                        }
+
+#if defined(__EMSCRIPTEN__)
+                        const std::string query_value = GetWebQueryParamString(name);
+
+                        if (!query_value.empty())
+                        {
+                                return query_value;
+                        }
+
+                        const std::string env_name = name ? name : "";
+
+                        if (env_name == "CLASSICMMO_SERVER_URL")
+                        {
+                                return "ws://3.134.107.141:7777";
+                        }
+#endif
+
+                        return "";
+                }
+
+                int GetEnvInt(const char *name, int fallback)
+                {
+                        const std::string value_string = GetEnvString(name);
+
+                        if (value_string.empty())
+                        {
+                                return fallback;
+                        }
+
+                        const char *value = value_string.c_str();
+                        char *end = nullptr;
+                        errno = 0;
+
+                        const long parsed = std::strtol(value, &end, 10);
+
+                        if (end == value || *end != '\0' || errno == ERANGE || parsed < INT_MIN || parsed > INT_MAX)
+                        {
+                                return fallback;
+                        }
+
+                        return static_cast<int>(parsed);
+                }
 
 		void SendDevTestChatIfConfigured(bool allow_send)
 		{
@@ -170,32 +275,36 @@ namespace classicmmo
 
 	} // namespace
 
-	void ClassicMMORuntime::Initialize()
-	{
-		if (g_initialized)
-		{
-			return;
-		}
+        void ClassicMMORuntime::Initialize()
+        {
+                if (g_initialized)
+                {
+                        return;
+                }
 
-		g_initialized = true;
+                g_initialized = true;
 
-		ix::initNetSystem();
-		ResetLastPlayerPosition();
-		g_sent_test_chat = false;
+#if defined(CLASSICMMO_HAS_IXWEBSOCKET)
+                ix::initNetSystem();
+#endif
 
-		std::cout << "[ClassicMMO] Runtime initialized" << std::endl;
+                ResetLastPlayerPosition();
+                g_sent_test_chat = false;
 
-		const char *server_url = std::getenv("CLASSICMMO_SERVER_URL");
+                std::cout << "[ClassicMMO] Runtime initialized" << std::endl;
 
-		if (server_url && server_url[0] != '\0')
-		{
-			g_network_client.Connect(server_url);
-		}
-		else
-		{
-			std::cout << "[ClassicMMO] Network disabled. Set CLASSICMMO_SERVER_URL to connect." << std::endl;
-		}
-	}
+                const std::string server_url = GetEnvString("CLASSICMMO_SERVER_URL");
+
+                if (!server_url.empty())
+                {
+                        std::cout << "[ClassicMMO] Network server: " << server_url << std::endl;
+                        g_network_client.Connect(server_url);
+                }
+                else
+                {
+                        std::cout << "[ClassicMMO] Network disabled. Set CLASSICMMO_SERVER_URL to connect." << std::endl;
+                }
+        }
 
 	void ClassicMMORuntime::Shutdown()
 	{
@@ -205,8 +314,9 @@ namespace classicmmo
 		}
 
 		g_network_client.Disconnect();
-
-		ix::uninitNetSystem();
+#if defined(CLASSICMMO_HAS_IXWEBSOCKET)
+                ix::uninitNetSystem();
+#endif
 		ResetLastPlayerPosition();
 		g_sent_test_chat = false;
 
