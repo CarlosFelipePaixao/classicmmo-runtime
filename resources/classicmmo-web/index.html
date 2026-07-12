@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClassicMMO</title>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      color: #f5efe2;
+      background: #121018;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top, rgba(117, 82, 48, 0.45), transparent 35%),
+        linear-gradient(180deg, #1a1622, #0d0b10);
+    }
+
+    .card {
+      width: min(92vw, 420px);
+      padding: 24px;
+      border: 1px solid rgba(255, 230, 180, 0.22);
+      border-radius: 18px;
+      background: rgba(22, 18, 28, 0.92);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0.5px;
+    }
+
+    p {
+      margin: 0 0 20px;
+      color: #cfc2ad;
+      line-height: 1.4;
+    }
+
+    label {
+      display: block;
+      margin: 14px 0 6px;
+      color: #ead8b8;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 230, 180, 0.22);
+      font-size: 16px;
+    }
+
+    input,
+    select {
+      padding: 12px;
+      color: #f5efe2;
+      background: #211b2a;
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 14px 16px;
+      cursor: pointer;
+      border: 0;
+      color: #1a1208;
+      background: linear-gradient(180deg, #ffd37a, #d99832);
+      font-weight: 800;
+      letter-spacing: 0.4px;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    details {
+      margin-top: 14px;
+      color: #bcae98;
+    }
+
+    summary {
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .hint {
+      margin-top: 14px;
+      font-size: 12px;
+      color: #9f927f;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>ClassicMMO</h1>
+    <p>Entre no teste online do RPG Maker 2003 multiplayer.</p>
+
+    <label for="playerName">Nome</label>
+    <input id="playerName" maxlength="12" placeholder="Seu nome">
+
+    <label for="spriteIndex">Personagem</label>
+    <select id="spriteIndex">
+      <option value="0">Herói 1</option>
+      <option value="1">Herói 2</option>
+      <option value="2">Herói 3</option>
+      <option value="3">Herói 4</option>
+      <option value="4">Herói 5</option>
+      <option value="5">Herói 6</option>
+      <option value="6">Herói 7</option>
+      <option value="7">Herói 8</option>
+    </select>
+
+    <details>
+      <summary>Servidor</summary>
+      <label for="serverUrl">Endereço WebSocket</label>
+      <input id="serverUrl" value="wss://ellen-groove-regulation-cuts.trycloudflare.com">
+    </details>
+
+    <button id="playButton">Entrar no jogo</button>
+
+    <div class="hint">
+      O servidor atual é temporário. Se o túnel for reiniciado, o endereço WSS precisa ser atualizado.
+    </div>
+  </main>
+
+  <script>
+    const DEFAULT_NAME = "Jogador" + Math.floor(Math.random() * 1000);
+
+    const playerName = document.getElementById("playerName");
+    const spriteIndex = document.getElementById("spriteIndex");
+    const serverUrl = document.getElementById("serverUrl");
+    const playButton = document.getElementById("playButton");
+
+    playerName.value = localStorage.getItem("classicmmo.name") || DEFAULT_NAME;
+    spriteIndex.value = localStorage.getItem("classicmmo.spriteIndex") || "0";
+    serverUrl.value = localStorage.getItem("classicmmo.server") || serverUrl.value;
+
+    function startGame() {
+      const name = (playerName.value || "Player").trim().slice(0, 12);
+      const server = (serverUrl.value || "").trim();
+      const index = spriteIndex.value || "0";
+
+      localStorage.setItem("classicmmo.name", name);
+      localStorage.setItem("classicmmo.spriteIndex", index);
+      localStorage.setItem("classicmmo.server", server);
+
+      const params = new URLSearchParams();
+      params.set("server", server);
+      params.set("name", name);
+      params.set("sprite", "Actor4");
+      params.set("spriteIndex", index);
+
+      window.location.href = "easyrpg-player.html?" + params.toString();
+    }
+
+    playButton.addEventListener("click", startGame);
+
+    playerName.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        startGame();
+      }
+    });
+  </script>
+</body>
+</html>
