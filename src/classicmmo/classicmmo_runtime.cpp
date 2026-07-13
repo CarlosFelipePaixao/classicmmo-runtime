@@ -1,6 +1,7 @@
 #include "classicmmo_runtime.h"
 
 #include "game_player.h"
+#include "game_vehicle.h"
 #include "main_data.h"
 
 #if defined(CLASSICMMO_HAS_IXWEBSOCKET)
@@ -321,6 +322,40 @@ namespace classicmmo
 			}
 
 			sprite_index = GetEnvInt("CLASSICMMO_SPRITE_INDEX", sprite_index);
+
+			if (Main_Data::game_player->InVehicle())
+
+			{
+
+			        auto *vehicle = Main_Data::game_player->GetVehicle();
+
+
+			        if (vehicle)
+
+			        {
+
+			                const auto vehicle_sprite_name = vehicle->GetOrigSpriteName();
+
+
+			                if (!vehicle_sprite_name.empty())
+
+			                {
+
+			                        sprite_name = std::string(
+
+			                                vehicle_sprite_name.data(),
+
+			                                vehicle_sprite_name.size());
+
+			                }
+
+
+			                sprite_index = vehicle->GetOrigSpriteIndex();
+
+			        }
+
+			}
+
 
 			std::string player_name = GetEnvString("CLASSICMMO_PLAYER_NAME");
 
