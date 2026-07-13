@@ -65,7 +65,10 @@ namespace classicmmo
                         const std::string &direction,
                         const std::string &sprite_name,
                         int sprite_index,
-                        const std::string &player_name);
+                        const std::string &player_name,
+                        const std::string &auth_token,
+                        const std::string &character_id,
+                        const std::string &game_mode);
 
                 std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
 

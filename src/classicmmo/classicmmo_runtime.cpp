@@ -100,7 +100,23 @@ namespace classicmmo
                                 return "chat";
                         }
 
-                        return "";
+                        
+                        if (env_name == "CLASSICMMO_AUTH_TOKEN")
+                        {
+                                return "token";
+                        }
+
+                        if (env_name == "CLASSICMMO_CHARACTER_ID")
+                        {
+                                return "characterId";
+                        }
+
+                        if (env_name == "CLASSICMMO_GAME_MODE")
+                        {
+                                return "mode";
+                        }
+
+return "";
                 }
 
                 std::string GetWebQueryParamString(const char *name)
@@ -364,14 +380,21 @@ namespace classicmmo
 				player_name = "Player";
 			}
 
+			const std::string auth_token = GetEnvString("CLASSICMMO_AUTH_TOKEN");
+			const std::string character_id = GetEnvString("CLASSICMMO_CHARACTER_ID");
+			const std::string game_mode = GetEnvString("CLASSICMMO_GAME_MODE");
+
 			g_network_client.SendPosition(
-				std::to_string(map_id),
-				x,
-				y,
-				DirectionToString(direction),
-				sprite_name,
-				sprite_index,
-				player_name);
+			        std::to_string(map_id),
+			        x,
+			        y,
+			        DirectionToString(direction),
+			        sprite_name,
+			        sprite_index,
+			        player_name,
+			        auth_token,
+			        character_id,
+			        game_mode);
 
 			SendDevTestChatIfConfigured(had_previous_position);
 		}

@@ -328,14 +328,17 @@ namespace classicmmo
                 const std::string &direction,
                 const std::string &sprite_name,
                 int sprite_index,
-                const std::string &player_name)
+                const std::string &player_name,
+                const std::string &auth_token,
+                const std::string &character_id,
+                const std::string &game_mode)
         {
                 if (!connected.load())
                 {
                         return;
                 }
 
-                const auto message = NetworkMessage::MakePositionMessage(
+                auto message = NetworkMessage::MakePositionMessage(
                         map_id,
                         x,
                         y,
@@ -343,6 +346,31 @@ namespace classicmmo
                         sprite_name,
                         sprite_index,
                         player_name);
+
+                if (!auth_token.empty() || !character_id.empty() || !game_mode.empty())
+                {
+                        auto enriched_message = json::parse(message, nullptr, false);
+
+                        if (!enriched_message.is_discarded() && enriched_message.is_object())
+                        {
+                                if (!auth_token.empty())
+                                {
+                                        enriched_message["authToken"] = auth_token;
+                                }
+
+                                if (!character_id.empty())
+                                {
+                                        enriched_message["characterId"] = character_id;
+                                }
+
+                                if (!game_mode.empty())
+                                {
+                                        enriched_message["gameMode"] = game_mode;
+                                }
+
+                                message = enriched_message.dump();
+                        }
+                }
 
 #if defined(CLASSICMMO_HAS_IXWEBSOCKET)
                 if (!socket)
@@ -362,7 +390,15 @@ namespace classicmmo
                 return;
 #endif
 
-                ClassicLog("[ClassicMMO] Send position: " + message);
+                ClassicLog(
+                        "[ClassicMMO] Send position: map=" +
+                        map_id +
+                        " x=" + std::to_string(x) +
+                        " y=" + std::to_string(y) +
+                        " player=" + player_name +
+                        " auth=" + std::string(auth_token.empty() ? "no" : "yes") +
+                        " characterId=" + std::string(character_id.empty() ? "no" : "yes") +
+                        " mode=" + game_mode);
         }
 
         std::vector<RemotePlayerState> NetworkClient::GetRemotePlayersSnapshot() const

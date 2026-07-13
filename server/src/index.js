@@ -1,12 +1,20 @@
+require("dotenv").config();
 const crypto = require("crypto");
 const WebSocket = require("ws");
 
+const {
+  loadAuthUserFromToken,
+  loadCharacterByName,
+  loadFirstCharacterForUser,
+  loadCharacterByIdForUser,
+  saveCharacterPositionById,
+  loadSpawnForCharacter,
+  loadSpawnForNewCharacter
+} = require("./supabase_client");
+
 const PORT = Number(process.env.PORT || 7777);
 
-const server = new WebSocket.Server({
-  port: PORT,
-  host: "0.0.0.0"
-});
+const server = new WebSocket.Server({ port: PORT });
 
 const clients = new Map();
 const players = new Map();
@@ -29,6 +37,17 @@ function broadcast(senderId, message) {
   }
 }
 
+function sanitizeForLog(message) {
+  if (!message || typeof message !== "object") {
+    return message;
+  }
+
+  return {
+    ...message,
+    authToken: message.authToken ? "[hidden]" : undefined
+  };
+}
+
 function getStateSnapshot(exceptClientId) {
   const snapshot = [];
 
@@ -43,7 +62,9 @@ function getStateSnapshot(exceptClientId) {
       direction: player.direction,
       spriteName: player.spriteName,
       spriteIndex: player.spriteIndex,
-      playerName: player.playerName
+      playerName: player.playerName,
+      chatText: player.chatText || "",
+      chatTimer: player.chatTimer || 0
     });
   }
 
@@ -81,8 +102,122 @@ function readPositionMessage(message) {
     direction,
     spriteName: typeof message.spriteName === "string" ? message.spriteName : "",
     spriteIndex: Number.isInteger(message.spriteIndex) ? message.spriteIndex : 0,
-    playerName: typeof message.playerName === "string" ? message.playerName : ""
+    playerName: typeof message.playerName === "string" ? message.playerName : "",
+    authToken: typeof message.authToken === "string" ? message.authToken : "",
+    characterId: typeof message.characterId === "string" ? message.characterId : "",
+    gameMode: typeof message.gameMode === "string" ? message.gameMode : ""
   };
+}
+
+function sendSpawnOverride(socket, spawn) {
+  if (!spawn) {
+    return;
+  }
+
+  send(socket, {
+    type: "spawn_override",
+    spawnKey: spawn.spawnKey,
+    reason: spawn.reason,
+    mapId: spawn.mapId,
+    x: spawn.x,
+    y: spawn.y,
+    direction: spawn.direction
+  });
+}
+
+async function resolveIdentity(socket, position) {
+  if (socket.classicmmoIdentityResolved) {
+    return true;
+  }
+
+  socket.classicmmoIdentityResolved = true;
+
+  if (position.authToken) {
+    const authUser = await loadAuthUserFromToken(position.authToken);
+
+    if (!authUser) {
+      send(socket, {
+        type: "error",
+        message: "Invalid auth token"
+      });
+
+      socket.close();
+      return false;
+    }
+
+    socket.classicmmoUserId = authUser.id;
+    socket.classicmmoUserEmail = authUser.email || "";
+
+    let character = null;
+
+    if (position.characterId) {
+      character = await loadCharacterByIdForUser(position.characterId, authUser.id);
+    }
+
+    if (!character) {
+      character = await loadFirstCharacterForUser(authUser.id);
+    }
+
+    if (character) {
+      socket.classicmmoCharacterId = character.id;
+      socket.classicmmoPlayerName = character.name;
+
+      const spawn = await loadSpawnForCharacter(character);
+
+      console.log("[auth] usuário autenticado com personagem:", {
+        userId: authUser.id,
+        characterId: character.id,
+        name: character.name,
+        spawn
+      });
+
+      sendSpawnOverride(socket, spawn);
+      return true;
+    }
+
+    socket.classicmmoCharacterId = null;
+    socket.classicmmoPlayerName = position.playerName || "NovoHeroi";
+
+    const spawn = loadSpawnForNewCharacter();
+
+    console.log("[auth] usuário autenticado sem personagem:", {
+      userId: authUser.id,
+      email: authUser.email,
+      mode: position.gameMode,
+      spawn
+    });
+
+    sendSpawnOverride(socket, spawn);
+    return true;
+  }
+
+  if (position.playerName) {
+    const character = await loadCharacterByName(position.playerName);
+
+    if (character) {
+      socket.classicmmoCharacterId = character.id;
+      socket.classicmmoPlayerName = character.name;
+
+      const spawn = await loadSpawnForCharacter(character);
+
+      console.log("[legacy] personagem por nome:", {
+        characterId: character.id,
+        name: character.name,
+        spawn
+      });
+
+      sendSpawnOverride(socket, spawn);
+      return true;
+    }
+  }
+
+  socket.classicmmoPlayerName = position.playerName || "Player";
+
+  console.log("[legacy] conexão sem token/personagem:", {
+    playerName: socket.classicmmoPlayerName
+  });
+
+  return true;
 }
 
 server.on("connection", (socket) => {
@@ -90,7 +225,7 @@ server.on("connection", (socket) => {
 
   clients.set(clientId, socket);
 
-  console.log(`[connect] ${clientId}`);
+  console.log("[connect]", clientId);
 
   send(socket, {
     type: "welcome",
@@ -102,7 +237,7 @@ server.on("connection", (socket) => {
     players: getStateSnapshot(clientId)
   });
 
-  socket.on("message", (raw) => {
+  socket.on("message", async (raw) => {
     let message;
 
     try {
@@ -116,13 +251,22 @@ server.on("connection", (socket) => {
       return;
     }
 
-    console.log(`[message] ${clientId}`, message);
+    console.log("[message]", clientId, sanitizeForLog(message));
 
     if (message.type === "chat") {
+      const text = String(message.text || "");
+
+      if (players.has(clientId)) {
+        const player = players.get(clientId);
+        player.chatText = text;
+        player.chatTimer = 180;
+        players.set(clientId, player);
+      }
+
       broadcast(clientId, {
         type: "chat",
         from: clientId,
-        text: String(message.text || "")
+        text
       });
 
       return;
@@ -140,6 +284,12 @@ server.on("connection", (socket) => {
         return;
       }
 
+      const identityOk = await resolveIdentity(socket, position);
+
+      if (!identityOk) {
+        return;
+      }
+
       const hadPlayerState = players.has(clientId);
 
       const currentPlayer = {
@@ -150,10 +300,13 @@ server.on("connection", (socket) => {
         direction: position.direction,
         spriteName: position.spriteName,
         spriteIndex: position.spriteIndex,
-        playerName: position.playerName
+        playerName: socket.classicmmoPlayerName || position.playerName || "Player",
+        chatText: "",
+        chatTimer: 0
       };
 
       players.set(clientId, currentPlayer);
+      socket.classicmmoLastPlayerState = currentPlayer;
 
       if (!hadPlayerState) {
         broadcast(clientId, {
@@ -190,13 +343,19 @@ server.on("connection", (socket) => {
     });
   });
 
-  socket.on("close", () => {
+  socket.on("close", async () => {
     const hadPlayerState = players.has(clientId);
+    const lastPlayerState = socket.classicmmoLastPlayerState;
+    const characterId = socket.classicmmoCharacterId;
 
     clients.delete(clientId);
     players.delete(clientId);
 
-    console.log(`[disconnect] ${clientId}`);
+    console.log("[disconnect]", clientId);
+
+    if (characterId && lastPlayerState) {
+      await saveCharacterPositionById(characterId, lastPlayerState);
+    }
 
     if (hadPlayerState) {
       broadcast(clientId, {
@@ -207,4 +366,4 @@ server.on("connection", (socket) => {
   });
 });
 
-console.log(`ClassicMMO server listening on ws://0.0.0.0:${PORT}`);
+console.log(`ClassicMMO server listening on ws://localhost:${PORT}`);
