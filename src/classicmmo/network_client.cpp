@@ -380,6 +380,22 @@ namespace classicmmo
                 return snapshot;
         }
 
+        bool NetworkClient::ConsumeSpawnOverride(SpawnOverride &out_spawn)
+        {
+                std::lock_guard<std::mutex> lock(spawn_override_mutex);
+
+                if (!has_spawn_override)
+                {
+                        return false;
+                }
+
+                out_spawn = pending_spawn_override;
+                has_spawn_override = false;
+                pending_spawn_override = SpawnOverride();
+
+                return true;
+        }
+
         void NetworkClient::HandleServerMessage(const std::string &raw_message)
         {
                 const auto message = json::parse(raw_message, nullptr, false);
@@ -467,6 +483,51 @@ namespace classicmmo
                         else
                         {
                                 ClassicLog("[ClassicMMO] Invalid position message: " + raw_message);
+                        }
+
+                        return;
+                }
+
+                if (type == "spawn_override")
+                {
+                        SpawnOverride spawn;
+                        spawn.spawn_key = JsonString(message, "spawnKey");
+                        spawn.reason = JsonString(message, "reason");
+                        spawn.map_id = JsonString(message, "mapId");
+                        spawn.direction = JsonString(message, "direction");
+
+                        if (message.contains("x") && message["x"].is_number_integer())
+                        {
+                                spawn.x = message["x"].get<int>();
+                        }
+
+                        if (message.contains("y") && message["y"].is_number_integer())
+                        {
+                                spawn.y = message["y"].get<int>();
+                        }
+
+                        if (spawn.direction.empty())
+                        {
+                                spawn.direction = "down";
+                        }
+
+                        if (!spawn.map_id.empty())
+                        {
+                                std::lock_guard<std::mutex> lock(spawn_override_mutex);
+                                pending_spawn_override = spawn;
+                                has_spawn_override = true;
+
+                                ClassicLog(
+                                        "[ClassicMMO] Received spawn_override: " +
+                                        spawn.spawn_key +
+                                        " map=" + spawn.map_id +
+                                        " x=" + std::to_string(spawn.x) +
+                                        " y=" + std::to_string(spawn.y) +
+                                        " dir=" + spawn.direction);
+                        }
+                        else
+                        {
+                                ClassicLog("[ClassicMMO] Invalid spawn_override message: " + raw_message);
                         }
 
                         return;

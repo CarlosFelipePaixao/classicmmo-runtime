@@ -202,6 +202,74 @@ namespace classicmmo
 			g_last_direction = -1;
 		}
 
+		int ParseMapId(const std::string &map_id)
+		{
+		        if (map_id.empty())
+		        {
+		                return -1;
+		        }
+
+		        char *end = nullptr;
+		        errno = 0;
+
+		        const long parsed = std::strtol(map_id.c_str(), &end, 10);
+
+		        if (end == map_id.c_str() || *end != 0 || errno == ERANGE || parsed <= 0 || parsed > INT_MAX)
+		        {
+		                return -1;
+		        }
+
+		        return static_cast<int>(parsed);
+		}
+
+		void ApplyPendingSpawnOverride()
+		{
+		        if (!Main_Data::game_player)
+		        {
+		                return;
+		        }
+
+		        SpawnOverride spawn;
+
+		        if (!g_network_client.ConsumeSpawnOverride(spawn))
+		        {
+		                return;
+		        }
+
+		        const int map_id = ParseMapId(spawn.map_id);
+
+		        if (map_id <= 0)
+		        {
+		                std::cout << "[ClassicMMO] Invalid spawn_override mapId: " << spawn.map_id << std::endl;
+		                return;
+		        }
+
+		        if (Main_Data::game_player->GetMapId() == map_id)
+		        {
+		                Main_Data::game_player->MoveTo(map_id, spawn.x, spawn.y);
+		        }
+		        else
+		        {
+		                Main_Data::game_player->ReserveTeleport(
+		                        map_id,
+		                        spawn.x,
+		                        spawn.y,
+		                        -1,
+		                        TeleportTarget::eSkillTeleport);
+		        }
+
+		        ResetLastPlayerPosition();
+
+		        std::cout
+		                << "[ClassicMMO] Applied spawn_override: "
+		                << spawn.spawn_key
+		                << " map=" << map_id
+		                << " x=" << spawn.x
+		                << " y=" << spawn.y
+		                << " dir=" << spawn.direction
+		                << std::endl;
+		}
+
 		void SendPlayerPositionIfChanged()
 		{
 			if (!g_network_client.IsConnected())
@@ -333,6 +401,7 @@ namespace classicmmo
 		}
 
 		g_network_client.Update();
+		ApplyPendingSpawnOverride();
 		SendPlayerPositionIfChanged();
 	}
 

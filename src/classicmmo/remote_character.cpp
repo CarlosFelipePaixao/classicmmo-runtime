@@ -10,22 +10,34 @@ namespace classicmmo
 
         constexpr int kTilePixels = 16;
 
-        // 2 pixels por frame = 8 frames para atravessar 1 tile de 16 px.
-        constexpr int kVisualPixelsPerFrame = 2;
+        // Movimento remoto:
+        // - normal: 2 px/frame, parecido com o movimento do RPG Maker.
+        // - atrasado: 4 px/frame, para recuperar pacotes que chegam em rajada.
+        constexpr int kBaseVisualPixelsPerFrame = 2;
+        constexpr int kCatchUpVisualPixelsPerFrame = 4;
+
+        // Permite acumular alguns tiles de atraso antes de considerar teleport/lag pesado.
+        // Isso evita "pulos" quando chegam 2 pacotes de movimento muito próximos.
+        constexpr int kMaxBufferedVisualOffset = kTilePixels * 4;
 
         // Troca o frame da perna a cada 2 updates.
         constexpr int kWalkingFrameTicks = 2;
 
         int MoveOffsetTowardZero(int value)
         {
+            const int speed =
+                std::abs(value) > kTilePixels
+                    ? kCatchUpVisualPixelsPerFrame
+                    : kBaseVisualPixelsPerFrame;
+
             if (value > 0)
             {
-                return std::max(0, value - kVisualPixelsPerFrame);
+                return std::max(0, value - speed);
             }
 
             if (value < 0)
             {
-                return std::min(0, value + kVisualPixelsPerFrame);
+                return std::min(0, value + speed);
             }
 
             return 0;
@@ -113,8 +125,8 @@ namespace classicmmo
             visual_offset_y += (old_y - y) * kTilePixels;
 
             if (
-                std::abs(visual_offset_x) > kTilePixels ||
-                std::abs(visual_offset_y) > kTilePixels)
+                std::abs(visual_offset_x) > kMaxBufferedVisualOffset ||
+                std::abs(visual_offset_y) > kMaxBufferedVisualOffset)
             {
                 ClearVisualOffset();
                 SetIdleAnimationFrame();

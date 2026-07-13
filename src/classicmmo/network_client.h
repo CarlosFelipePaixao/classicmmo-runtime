@@ -35,6 +35,16 @@ namespace classicmmo
                 int chat_timer = 0;
         };
 
+        struct SpawnOverride
+        {
+                std::string spawn_key;
+                std::string reason;
+                std::string map_id;
+                int x = 0;
+                int y = 0;
+                std::string direction = "down";
+        };
+
         class NetworkClient
         {
         public:
@@ -58,6 +68,8 @@ namespace classicmmo
                         const std::string &player_name);
 
                 std::vector<RemotePlayerState> GetRemotePlayersSnapshot() const;
+
+                bool ConsumeSpawnOverride(SpawnOverride &out_spawn);
 
                 void Update();
 
@@ -86,6 +98,10 @@ namespace classicmmo
 
                 mutable std::mutex remote_players_mutex;
                 std::unordered_map<std::string, RemotePlayerState> remote_players;
+
+                mutable std::mutex spawn_override_mutex;
+                bool has_spawn_override = false;
+                SpawnOverride pending_spawn_override;
         };
 
 } // namespace classicmmo
