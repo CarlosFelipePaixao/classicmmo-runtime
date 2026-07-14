@@ -222,9 +222,9 @@ function loadSpawnForNewCharacter() {
   return {
     spawnKey: "character_creation_pending",
     reason: "authenticated_user_without_character",
-    mapId: "1",
-    x: 7,
-    y: 16,
+    mapId: "3",
+    x: 24,
+    y: 14,
     direction: "down"
   };
 }

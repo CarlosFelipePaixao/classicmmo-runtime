@@ -13,6 +13,7 @@ const {
 } = require("./supabase_client");
 
 const PORT = Number(process.env.PORT || 7777);
+const SPAWN_OVERRIDE_DELAY_MS = Number(process.env.SPAWN_OVERRIDE_DELAY_MS || 5000);
 
 const server = new WebSocket.Server({ port: PORT });
 
@@ -114,15 +115,21 @@ function sendSpawnOverride(socket, spawn) {
     return;
   }
 
-  send(socket, {
-    type: "spawn_override",
-    spawnKey: spawn.spawnKey,
-    reason: spawn.reason,
-    mapId: spawn.mapId,
-    x: spawn.x,
-    y: spawn.y,
-    direction: spawn.direction
-  });
+  setTimeout(() => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    send(socket, {
+      type: "spawn_override",
+      spawnKey: spawn.spawnKey,
+      reason: spawn.reason,
+      mapId: spawn.mapId,
+      x: spawn.x,
+      y: spawn.y,
+      direction: spawn.direction
+    });
+  }, SPAWN_OVERRIDE_DELAY_MS);
 }
 
 async function resolveIdentity(socket, position) {
