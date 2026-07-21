@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build-web:
-    name: Emscripten SDL2 Release
+    name: Emscripten SDL3 Release
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -108,7 +108,7 @@ jobs:
           source "$EASYRPG_BUILDSCRIPTS/emscripten/emsdk-portable/emsdk_env.sh"
 
           cmake \
-            --preset emscripten-sdl2-release \
+            --preset emscripten-sdl3-release \
             -DPLAYER_JS_OUTPUT_NAME=easyrpg-player
 
       - name: Compilar Player Web
@@ -117,12 +117,12 @@ jobs:
 
           cmake \
             --build \
-            --preset emscripten-sdl2-release \
+            --preset emscripten-sdl3-release \
             --parallel 2
 
       - name: Separar arquivos Web
         run: |
-          output="build/emscripten-sdl2-release"
+          output="build/emscripten-sdl3-release"
           artifact="artifact/lumnia-web-runtime"
 
           test -f "$output/easyrpg-player.js"
