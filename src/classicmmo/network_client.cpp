@@ -110,7 +110,9 @@ namespace classicmmo
                                 return false;
                         }
 
+                        // LUMNIA_LOGIN_SPRITE_GHOST_FIX
                         out_player.client_id = client_id;
+                        out_player.character_id = JsonString(message, "characterId");
                         out_player.map_id = map_id;
                         out_player.x = JsonInt(message, "x", 0);
                         out_player.y = JsonInt(message, "y", 0);
@@ -283,6 +285,9 @@ namespace classicmmo
                 {
                         std::lock_guard<std::mutex> lock(remote_players_mutex);
                         remote_players.clear();
+                        local_client_id.clear();
+                        local_character_id.clear();
+                        local_player_name.clear();
                 }
         }
 
@@ -336,6 +341,20 @@ namespace classicmmo
                 if (!connected.load())
                 {
                         return;
+                }
+
+                {
+                        std::lock_guard<std::mutex> lock(remote_players_mutex);
+
+                        if (!player_name.empty())
+                        {
+                                local_player_name = player_name;
+                        }
+
+                        if (!character_id.empty())
+                        {
+                                local_character_id = character_id;
+                        }
                 }
 
                 auto message = NetworkMessage::MakePositionMessage(
@@ -446,6 +465,13 @@ namespace classicmmo
 
                 if (type == "welcome")
                 {
+                        const std::string client_id = JsonString(message, "clientId");
+
+                        {
+                                std::lock_guard<std::mutex> lock(remote_players_mutex);
+                                local_client_id = client_id;
+                        }
+
                         ClassicLog("[ClassicMMO] Received welcome: " + raw_message);
                         return;
                 }
@@ -536,6 +562,7 @@ namespace classicmmo
                         // o spawn também pode restaurar a aparência da conta.
                         spawn.sprite_name = JsonString(message, "spriteName");
                         spawn.sprite_index = JsonInt(message, "spriteIndex", 0);
+                        spawn.character_id = JsonString(message, "characterId");
 
                         if (message.contains("x") && message["x"].is_number_integer())
                         {
@@ -554,6 +581,32 @@ namespace classicmmo
 
                         if (!spawn.map_id.empty())
                         {
+                                if (!spawn.character_id.empty())
+                                {
+                                        std::lock_guard<std::mutex> remote_lock(remote_players_mutex);
+                                        local_character_id = spawn.character_id;
+
+                                        for (auto it = remote_players.begin(); it != remote_players.end();)
+                                        {
+                                                const bool same_character =
+                                                        !local_character_id.empty() &&
+                                                        it->second.character_id == local_character_id;
+
+                                                const bool same_name =
+                                                        !local_player_name.empty() &&
+                                                        it->second.player_name == local_player_name;
+
+                                                if (same_character || same_name)
+                                                {
+                                                        it = remote_players.erase(it);
+                                                }
+                                                else
+                                                {
+                                                        ++it;
+                                                }
+                                        }
+                                }
+
                                 std::lock_guard<std::mutex> lock(spawn_override_mutex);
                                 pending_spawn_override = spawn;
                                 has_spawn_override = true;
@@ -612,6 +665,23 @@ namespace classicmmo
 
                 for (const auto &player : players)
                 {
+                        const bool same_client =
+                                !local_client_id.empty() &&
+                                player.client_id == local_client_id;
+
+                        const bool same_character =
+                                !local_character_id.empty() &&
+                                player.character_id == local_character_id;
+
+                        const bool same_name =
+                                !local_player_name.empty() &&
+                                player.player_name == local_player_name;
+
+                        if (same_client || same_character || same_name)
+                        {
+                                continue;
+                        }
+
                         remote_players[player.client_id] = player;
                 }
         }
@@ -619,6 +689,24 @@ namespace classicmmo
         void NetworkClient::UpsertRemotePlayer(const RemotePlayerState &player)
         {
                 std::lock_guard<std::mutex> lock(remote_players_mutex);
+
+                const bool same_client =
+                        !local_client_id.empty() &&
+                        player.client_id == local_client_id;
+
+                const bool same_character =
+                        !local_character_id.empty() &&
+                        player.character_id == local_character_id;
+
+                const bool same_name =
+                        !local_player_name.empty() &&
+                        player.player_name == local_player_name;
+
+                if (same_client || same_character || same_name)
+                {
+                        remote_players.erase(player.client_id);
+                        return;
+                }
 
                 const auto existing = remote_players.find(player.client_id);
 

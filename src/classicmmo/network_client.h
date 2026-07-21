@@ -23,7 +23,9 @@ namespace classicmmo
 
         struct RemotePlayerState
         {
+                // LUMNIA_LOGIN_SPRITE_GHOST_FIX
                 std::string client_id;
+                std::string character_id;
                 std::string map_id;
                 int x = 0;
                 int y = 0;
@@ -48,6 +50,7 @@ namespace classicmmo
                 // aparência persistida devolvida pelo servidor no spawn.
                 std::string sprite_name;
                 int sprite_index = 0;
+                std::string character_id;
         };
 
         class NetworkClient
@@ -106,6 +109,11 @@ namespace classicmmo
 
                 mutable std::mutex remote_players_mutex;
                 std::unordered_map<std::string, RemotePlayerState> remote_players;
+
+                // Identidade local usada para nunca desenhar a própria conta como remota.
+                std::string local_client_id;
+                std::string local_character_id;
+                std::string local_player_name;
 
                 mutable std::mutex spawn_override_mutex;
                 bool has_spawn_override = false;

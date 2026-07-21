@@ -14,7 +14,8 @@ const {
 } = require("./supabase_client");
 
 const PORT = Number(process.env.PORT || 7777);
-const SPAWN_OVERRIDE_DELAY_MS = Number(process.env.SPAWN_OVERRIDE_DELAY_MS || 5000);
+// LUMNIA_LOGIN_SPRITE_GHOST_SERVER_FIX
+const SPAWN_OVERRIDE_DELAY_MS = Number(process.env.SPAWN_OVERRIDE_DELAY_MS || 0);
 
 const server = new WebSocket.Server({ port: PORT });
 
@@ -58,6 +59,7 @@ function getStateSnapshot(exceptClientId) {
 
     snapshot.push({
       clientId: player.clientId,
+      characterId: player.characterId || "",
       mapId: player.mapId,
       x: player.x,
       y: player.y,
@@ -71,6 +73,32 @@ function getStateSnapshot(exceptClientId) {
   }
 
   return snapshot;
+}
+
+
+function closeOlderAuthenticatedSessions(currentSocket, userId) {
+  if (!userId) {
+    return;
+  }
+
+  for (const [otherClientId, otherSocket] of clients.entries()) {
+    if (otherSocket === currentSocket) {
+      continue;
+    }
+
+    if (otherSocket.classicmmoUserId !== userId) {
+      continue;
+    }
+
+    console.log("[auth] encerrando sessão duplicada:", {
+      userId,
+      oldClientId: otherClientId,
+      newClientId: currentSocket.classicmmoClientId
+    });
+
+    otherSocket.classicmmoReplacedByNewSession = true;
+    otherSocket.close(4001, "Sessão substituída por um novo login.");
+  }
 }
 
 function normalizeDirection(direction) {
@@ -184,7 +212,8 @@ function sendSpawnOverride(socket, spawn) {
       spriteName: String(spawn.spriteName || ""),
       spriteIndex: Number.isInteger(spawn.spriteIndex)
         ? spawn.spriteIndex
-        : 0
+        : 0,
+      characterId: String(spawn.characterId || "")
     });
   }, SPAWN_OVERRIDE_DELAY_MS);
 }
@@ -212,6 +241,8 @@ async function resolveIdentity(socket, position) {
     socket.classicmmoUserId = authUser.id;
     socket.classicmmoUserEmail = authUser.email || "";
 
+
+    closeOlderAuthenticatedSessions(socket, authUser.id);
     let character = null;
 
     if (position.characterId) {
@@ -227,6 +258,7 @@ async function resolveIdentity(socket, position) {
       socket.classicmmoPlayerName = character.name;
 
       const spawn = await loadSpawnForCharacter(character);
+      spawn.characterId = character.id;
 
       console.log("[auth] usuário autenticado com personagem:", {
         userId: authUser.id,
@@ -288,6 +320,7 @@ server.on("connection", (socket) => {
   const clientId = crypto.randomUUID();
 
   clients.set(clientId, socket);
+  socket.classicmmoClientId = clientId;
 
   console.log("[connect]", clientId);
 
@@ -435,6 +468,7 @@ server.on("connection", (socket) => {
 
       const currentPlayer = {
         clientId,
+        characterId: socket.classicmmoCharacterId || position.characterId || "",
         mapId: position.mapId,
         x: position.x,
         y: position.y,
@@ -453,6 +487,7 @@ server.on("connection", (socket) => {
         broadcast(clientId, {
           type: "player_joined",
           clientId,
+          characterId: currentPlayer.characterId,
           mapId: currentPlayer.mapId,
           x: currentPlayer.x,
           y: currentPlayer.y,
@@ -466,6 +501,7 @@ server.on("connection", (socket) => {
       broadcast(clientId, {
         type: "position",
         from: clientId,
+        characterId: currentPlayer.characterId,
         mapId: currentPlayer.mapId,
         x: currentPlayer.x,
         y: currentPlayer.y,
@@ -494,7 +530,11 @@ server.on("connection", (socket) => {
 
     console.log("[disconnect]", clientId);
 
-    if (characterId && lastPlayerState) {
+    if (
+      !socket.classicmmoReplacedByNewSession &&
+      characterId &&
+      lastPlayerState
+    ) {
       await saveCharacterPositionById(characterId, lastPlayerState);
     }
 

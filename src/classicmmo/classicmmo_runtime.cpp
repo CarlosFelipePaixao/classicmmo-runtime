@@ -53,6 +53,12 @@ namespace classicmmo
                 // impede que o pedido seja reenviado a cada frame.
                 bool g_character_creation_request_sent = false;
 
+                // LUMNIA_LOGIN_SPRITE_GHOST_FIX
+                // Aparência da conta fica ativa e é reaplicada quando o EasyRPG
+                // chama ResetGraphic() durante trocas de mapa.
+                std::string g_account_sprite_name;
+                int g_account_sprite_index = 0;
+
                 constexpr int kCharacterCreationMapId = 3;
                 constexpr int kCharacterSkinVariableId = 1;
                 constexpr int kCharacterEyesVariableId = 2;
@@ -218,6 +224,41 @@ return "";
                                 status);
                 }
 
+                void RememberAccountSprite(const SpawnOverride &spawn)
+                {
+                        if (spawn.sprite_name.empty())
+                        {
+                                return;
+                        }
+
+                        g_account_sprite_name = spawn.sprite_name;
+                        g_account_sprite_index = spawn.sprite_index;
+                }
+
+                void EnsureAccountSpriteApplied()
+                {
+                        if (!Main_Data::game_player || g_account_sprite_name.empty())
+                        {
+                                return;
+                        }
+
+                        const std::string current_name =
+                                Main_Data::game_player->GetSpriteName();
+                        const int current_index =
+                                Main_Data::game_player->GetSpriteIndex();
+
+                        if (
+                                current_name == g_account_sprite_name &&
+                                current_index == g_account_sprite_index)
+                        {
+                                return;
+                        }
+
+                        Main_Data::game_player->MoveRouteSetSpriteGraphic(
+                                g_account_sprite_name,
+                                g_account_sprite_index);
+                }
+
 		void SendDevTestChatIfConfigured(bool allow_send)
 		{
 			if (!allow_send || g_sent_test_chat)
@@ -278,6 +319,8 @@ return "";
 		                return;
 		        }
 
+                        RememberAccountSprite(spawn);
+
                         // LUMNIA_CHARACTER_PERSISTENCE:
                         // respostas da criação reutilizam o envelope spawn_override,
                         // mas não devem teletransportar o jogador.
@@ -295,13 +338,6 @@ return "";
                                 g_character_creation_request_sent = false;
                                 std::cout << "[ClassicMMO] Character creation failed" << std::endl;
                                 return;
-                        }
-
-                        if (!spawn.sprite_name.empty())
-                        {
-                                Main_Data::game_player->MoveRouteSetSpriteGraphic(
-                                        spawn.sprite_name,
-                                        spawn.sprite_index);
                         }
 
 		        const int map_id = ParseMapId(spawn.map_id);
@@ -573,6 +609,8 @@ return "";
                 ResetLastPlayerPosition();
                 g_sent_test_chat = false;
                 g_character_creation_request_sent = false;
+                g_account_sprite_name.clear();
+                g_account_sprite_index = 0;
 
                 std::cout << "[ClassicMMO] Runtime initialized" << std::endl;
 
@@ -603,6 +641,8 @@ return "";
 		ResetLastPlayerPosition();
 		g_sent_test_chat = false;
                 g_character_creation_request_sent = false;
+                g_account_sprite_name.clear();
+                g_account_sprite_index = 0;
 
 		g_initialized = false;
 
@@ -619,6 +659,12 @@ return "";
 		g_network_client.Update();
 		ApplyPendingSpawnOverride();
                 ProcessCharacterCreationPersistence();
+
+                // Deve ocorrer depois do processamento de spawn/teleporte.
+                // Em trocas de mapa, ResetGraphic() apaga o gráfico customizado;
+                // esta verificação o restaura sem reiniciar a animação a cada frame.
+                EnsureAccountSpriteApplied();
+
 		SendPlayerPositionIfChanged();
 	}
 
