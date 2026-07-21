@@ -1,0 +1,152 @@
+name: Build Lumnia Web Runtime
+
+on:
+  push:
+    branches:
+      - classicmmo/dev
+      - "lumnia/**"
+    paths:
+      - "src/**"
+      - "lib/**"
+      - "builds/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - ".github/workflows/build-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lumnia-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-web:
+    name: Emscripten SDL2 Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    env:
+      EASYRPG_BUILDSCRIPTS: ${{ github.workspace }}/.toolchains/easyrpg-buildscripts
+      BUILD_LIBLCF: "1"
+
+    steps:
+      - name: Checkout do runtime
+        uses: actions/checkout@v4
+
+      - name: Validar JavaScript do servidor
+        run: |
+          node --check server/src/index.js
+          node --check server/src/supabase_client.js
+
+      - name: Instalar ferramentas do Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bison \
+            ca-certificates \
+            cmake \
+            curl \
+            flex \
+            g++ \
+            gettext \
+            git \
+            gperf \
+            libtool \
+            libtool-bin \
+            make \
+            meson \
+            ninja-build \
+            patch \
+            perl \
+            pkg-config \
+            python3 \
+            python3-pip \
+            unzip \
+            wget \
+            xz-utils
+
+      - name: Obter buildscripts oficiais do EasyRPG
+        id: buildscripts
+        run: |
+          mkdir -p "$(dirname "$EASYRPG_BUILDSCRIPTS")"
+          git clone --depth 1 \
+            https://github.com/EasyRPG/buildscripts.git \
+            "$EASYRPG_BUILDSCRIPTS"
+
+          echo "sha=$(git -C "$EASYRPG_BUILDSCRIPTS" rev-parse HEAD)" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Restaurar toolchain Emscripten
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: .toolchains/easyrpg-buildscripts/emscripten
+          key: ${{ runner.os }}-easyrpg-emscripten-${{ steps.buildscripts.outputs.sha }}-v1
+
+      - name: Compilar dependências do EasyRPG
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        working-directory: .toolchains/easyrpg-buildscripts/emscripten
+        run: |
+          chmod +x ./*.sh
+          BUILD_LIBLCF=1 ./0_build_everything.sh
+
+      - name: Reativar Emscripten armazenado
+        working-directory: .toolchains/easyrpg-buildscripts/emscripten
+        run: |
+          test -f emsdk-portable/emsdk_env.sh
+          cd emsdk-portable
+          ./emsdk activate 5.0.5
+          source ./emsdk_env.sh
+          emcc --version
+
+      - name: Configurar Player Web
+        run: |
+          source "$EASYRPG_BUILDSCRIPTS/emscripten/emsdk-portable/emsdk_env.sh"
+
+          cmake \
+            --preset emscripten-sdl2-release \
+            -DPLAYER_JS_OUTPUT_NAME=easyrpg-player
+
+      - name: Compilar Player Web
+        run: |
+          source "$EASYRPG_BUILDSCRIPTS/emscripten/emsdk-portable/emsdk_env.sh"
+
+          cmake \
+            --build \
+            --preset emscripten-sdl2-release \
+            --parallel 2
+
+      - name: Separar arquivos Web
+        run: |
+          output="build/emscripten-sdl2-release"
+          artifact="artifact/lumnia-web-runtime"
+
+          test -f "$output/easyrpg-player.js"
+          test -f "$output/easyrpg-player.wasm"
+
+          mkdir -p "$artifact"
+
+          cp "$output/easyrpg-player.js" "$artifact/"
+          cp "$output/easyrpg-player.wasm" "$artifact/"
+
+          if [ -f "$output/easyrpg-player.html" ]; then
+            cp "$output/easyrpg-player.html" "$artifact/"
+          fi
+
+          find "$output" -maxdepth 1 -type f \
+            \( -name "*.data" -o -name "*.worker.js" \) \
+            -exec cp {} "$artifact/" \;
+
+          ls -lh "$artifact"
+
+      - name: Publicar artefato da build
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumnia-web-runtime-${{ github.sha }}
+          path: artifact/lumnia-web-runtime
+          if-no-files-found: error
+          retention-days: 14

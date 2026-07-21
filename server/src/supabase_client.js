@@ -109,6 +109,134 @@ async function loadCharacterByIdForUser(characterId, userId) {
   return data || null;
 }
 
+// LUMNIA_CHARACTER_PERSISTENCE
+function clampInteger(value, minimum, maximum, fallback) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number)) {
+    return fallback;
+  }
+
+  return Math.max(minimum, Math.min(maximum, number));
+}
+
+function normalizeCharacterName(rawName, userId) {
+  let name = String(rawName || "")
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}_ -]+/gu, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (name.length < 3) {
+    const suffix = String(userId || "")
+      .replace(/-/g, "")
+      .slice(0, 6);
+
+    name = `Heroi_${suffix || "Novo"}`;
+  }
+
+  return Array.from(name).slice(0, 20).join("");
+}
+
+async function createCharacterForUser(userId, characterData = {}) {
+  if (!userId) {
+    throw new Error("Usuário ausente ao criar personagem.");
+  }
+
+  const existing = await loadFirstCharacterForUser(userId);
+
+  if (existing) {
+    return {
+      character: existing,
+      created: false
+    };
+  }
+
+  const client = getSupabaseClient();
+
+  const skin = clampInteger(characterData.skin, 1, 8, 1);
+  const eyes = clampInteger(characterData.eyes, 1, 3, 1);
+  const classId = clampInteger(characterData.classId, 1, 99, 1);
+  const hair = clampInteger(characterData.hair, 1, 3, 1);
+  const spriteIndex = clampInteger(characterData.spriteIndex, 0, 99, 0);
+
+  const baseName = normalizeCharacterName(characterData.name, userId);
+  const classKey = classId === 1 ? "mage" : "mage";
+
+  const row = {
+    user_id: userId,
+    name: baseName,
+    class_key: classKey,
+    level: 1,
+    xp: 0,
+    gold: 50,
+    current_map_id: "1",
+    current_x: 7,
+    current_y: 15,
+    current_direction: "right",
+    appearance: {
+      skin,
+      eyes,
+      class: classId,
+      hair
+    },
+    sprite_name: String(characterData.spriteName || ""),
+    sprite_index: spriteIndex
+  };
+
+  let result = await client
+    .from("characters")
+    .insert(row)
+    .select("*")
+    .single();
+
+  if (result.error && result.error.code === "23505") {
+    const concurrentExisting = await loadFirstCharacterForUser(userId);
+
+    if (concurrentExisting) {
+      return {
+        character: concurrentExisting,
+        created: false
+      };
+    }
+
+    const suffix = String(userId)
+      .replace(/-/g, "")
+      .slice(0, 5);
+
+    row.name = `${baseName.slice(0, 14)}_${suffix}`;
+
+    result = await client
+      .from("characters")
+      .insert(row)
+      .select("*")
+      .single();
+  }
+
+  if (result.error || !result.data) {
+    throw new Error(
+      result.error
+        ? result.error.message
+        : "Supabase não devolveu o personagem criado."
+    );
+  }
+
+  console.log("[supabase] personagem criado:", {
+    id: result.data.id,
+    userId,
+    name: result.data.name,
+    classKey: result.data.class_key,
+    appearance: result.data.appearance,
+    spriteName: result.data.sprite_name,
+    spriteIndex: result.data.sprite_index
+  });
+
+  return {
+    character: result.data,
+    created: true
+  };
+}
+
 async function saveCharacterPositionById(characterId, position) {
   if (!characterId || !position) {
     return;
@@ -191,7 +319,11 @@ async function loadSpawnForCharacter(character) {
       mapId: "1",
       x: 7,
       y: 16,
-      direction: "down"
+      direction: "down",
+      spriteName: String(character.sprite_name || ""),
+      spriteIndex: Number.isInteger(character.sprite_index)
+        ? character.sprite_index
+        : 0
     };
   }
 
@@ -214,7 +346,11 @@ async function loadSpawnForCharacter(character) {
     mapId: "2",
     x: point.x,
     y: point.y,
-    direction: "down"
+    direction: "down",
+    spriteName: String(character.sprite_name || ""),
+    spriteIndex: Number.isInteger(character.sprite_index)
+      ? character.sprite_index
+      : 0
   };
 }
 
@@ -235,6 +371,7 @@ module.exports = {
   loadCharacterByName,
   loadFirstCharacterForUser,
   loadCharacterByIdForUser,
+  createCharacterForUser,
   saveCharacterPositionById,
   loadStoryFlag,
   loadSpawnForCharacter,

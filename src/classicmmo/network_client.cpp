@@ -532,6 +532,11 @@ namespace classicmmo
                         spawn.map_id = JsonString(message, "mapId");
                         spawn.direction = JsonString(message, "direction");
 
+                        // LUMNIA_CHARACTER_PERSISTENCE:
+                        // o spawn também pode restaurar a aparência da conta.
+                        spawn.sprite_name = JsonString(message, "spriteName");
+                        spawn.sprite_index = JsonInt(message, "spriteIndex", 0);
+
                         if (message.contains("x") && message["x"].is_number_integer())
                         {
                                 spawn.x = message["x"].get<int>();

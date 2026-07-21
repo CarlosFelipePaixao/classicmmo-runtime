@@ -43,6 +43,11 @@ namespace classicmmo
                 int x = 0;
                 int y = 0;
                 std::string direction = "down";
+
+                // LUMNIA_CHARACTER_PERSISTENCE:
+                // aparência persistida devolvida pelo servidor no spawn.
+                std::string sprite_name;
+                int sprite_index = 0;
         };
 
         class NetworkClient

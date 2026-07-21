@@ -1,6 +1,7 @@
 #include "classicmmo_runtime.h"
 
 #include "game_player.h"
+#include "game_variables.h"
 #include "game_vehicle.h"
 #include "main_data.h"
 
@@ -47,6 +48,18 @@ namespace classicmmo
 		NetworkClient g_network_client;
 		bool g_initialized = false;
 		bool g_sent_test_chat = false;
+
+                // LUMNIA_CHARACTER_PERSISTENCE:
+                // impede que o pedido seja reenviado a cada frame.
+                bool g_character_creation_request_sent = false;
+
+                constexpr int kCharacterCreationMapId = 3;
+                constexpr int kCharacterSkinVariableId = 1;
+                constexpr int kCharacterEyesVariableId = 2;
+                constexpr int kCharacterClassVariableId = 3;
+                constexpr int kCharacterHairVariableId = 4;
+                constexpr int kCharacterSaveRequestVariableId = 8;
+                constexpr int kCharacterSaveStatusVariableId = 9;
 
 		int g_last_map_id = -1;
 		int g_last_x = -1;
@@ -193,6 +206,18 @@ return "";
                         return static_cast<int>(parsed);
                 }
 
+                void SetCharacterCreationStatus(int status)
+                {
+                        if (!Main_Data::game_variables)
+                        {
+                                return;
+                        }
+
+                        Main_Data::game_variables->Set(
+                                kCharacterSaveStatusVariableId,
+                                status);
+                }
+
 		void SendDevTestChatIfConfigured(bool allow_send)
 		{
 			if (!allow_send || g_sent_test_chat)
@@ -253,6 +278,32 @@ return "";
 		                return;
 		        }
 
+                        // LUMNIA_CHARACTER_PERSISTENCE:
+                        // respostas da criação reutilizam o envelope spawn_override,
+                        // mas não devem teletransportar o jogador.
+                        if (spawn.reason == "character_created")
+                        {
+                                SetCharacterCreationStatus(1);
+                                g_character_creation_request_sent = false;
+                                std::cout << "[ClassicMMO] Character creation saved" << std::endl;
+                                return;
+                        }
+
+                        if (spawn.reason == "character_creation_error")
+                        {
+                                SetCharacterCreationStatus(2);
+                                g_character_creation_request_sent = false;
+                                std::cout << "[ClassicMMO] Character creation failed" << std::endl;
+                                return;
+                        }
+
+                        if (!spawn.sprite_name.empty())
+                        {
+                                Main_Data::game_player->MoveRouteSetSpriteGraphic(
+                                        spawn.sprite_name,
+                                        spawn.sprite_index);
+                        }
+
 		        const int map_id = ParseMapId(spawn.map_id);
 
 		        if (map_id <= 0)
@@ -286,6 +337,107 @@ return "";
 		                << " dir=" << spawn.direction
 		                << std::endl;
 		}
+
+                void ProcessCharacterCreationPersistence()
+                {
+                        if (!g_network_client.IsConnected())
+                        {
+                                return;
+                        }
+
+                        if (!Main_Data::game_player || !Main_Data::game_variables)
+                        {
+                                return;
+                        }
+
+                        const int map_id = Main_Data::game_player->GetMapId();
+
+                        if (map_id != kCharacterCreationMapId)
+                        {
+                                g_character_creation_request_sent = false;
+                                return;
+                        }
+
+                        const int request = Main_Data::game_variables->Get(
+                                kCharacterSaveRequestVariableId);
+
+                        if (request != 1)
+                        {
+                                g_character_creation_request_sent = false;
+                                return;
+                        }
+
+                        const int status = Main_Data::game_variables->Get(
+                                kCharacterSaveStatusVariableId);
+
+                        if (status != 0 || g_character_creation_request_sent)
+                        {
+                                return;
+                        }
+
+                        const std::string auth_token = GetEnvString(
+                                "CLASSICMMO_AUTH_TOKEN");
+
+                        if (auth_token.empty())
+                        {
+                                SetCharacterCreationStatus(2);
+                                return;
+                        }
+
+                        std::string player_name = GetEnvString(
+                                "CLASSICMMO_PLAYER_NAME");
+
+                        if (player_name.empty())
+                        {
+                                player_name = "NovoHeroi";
+                        }
+
+                        const int skin = Main_Data::game_variables->Get(
+                                kCharacterSkinVariableId);
+                        const int eyes = Main_Data::game_variables->Get(
+                                kCharacterEyesVariableId);
+                        const int character_class = Main_Data::game_variables->Get(
+                                kCharacterClassVariableId);
+                        const int hair = Main_Data::game_variables->Get(
+                                kCharacterHairVariableId);
+
+                        const std::string creation_mode =
+                                "create_character:" +
+                                std::to_string(skin) + ":" +
+                                std::to_string(eyes) + ":" +
+                                std::to_string(character_class) + ":" +
+                                std::to_string(hair);
+
+                        const std::string sprite_name =
+                                Main_Data::game_player->GetSpriteName();
+                        const int sprite_index =
+                                Main_Data::game_player->GetSpriteIndex();
+
+                        g_network_client.SendPosition(
+                                std::to_string(map_id),
+                                Main_Data::game_player->GetX(),
+                                Main_Data::game_player->GetY(),
+                                DirectionToString(
+                                        Main_Data::game_player->GetDirection()),
+                                sprite_name,
+                                sprite_index,
+                                player_name,
+                                auth_token,
+                                "",
+                                creation_mode);
+
+                        g_character_creation_request_sent = true;
+
+                        std::cout
+                                << "[ClassicMMO] Sent character creation request"
+                                << " skin=" << skin
+                                << " eyes=" << eyes
+                                << " class=" << character_class
+                                << " hair=" << hair
+                                << " sprite=" << sprite_name
+                                << " index=" << sprite_index
+                                << std::endl;
+                }
 
 		void SendPlayerPositionIfChanged()
 		{
@@ -332,12 +484,16 @@ return "";
 
 			const std::string sprite_name_override = GetEnvString("CLASSICMMO_SPRITE_NAME");
 
-			if (!sprite_name_override.empty())
+                        // LUMNIA_CHARACTER_PERSISTENCE:
+                        // a aparência real criada no RPG Maker tem prioridade.
+                        // O valor da URL é somente fallback para ator sem gráfico.
+			if (sprite_name.empty() && !sprite_name_override.empty())
 			{
 				sprite_name = sprite_name_override;
+                                sprite_index = GetEnvInt(
+                                        "CLASSICMMO_SPRITE_INDEX",
+                                        sprite_index);
 			}
-
-			sprite_index = GetEnvInt("CLASSICMMO_SPRITE_INDEX", sprite_index);
 
 			if (Main_Data::game_player->InVehicle())
 
@@ -416,6 +572,7 @@ return "";
 
                 ResetLastPlayerPosition();
                 g_sent_test_chat = false;
+                g_character_creation_request_sent = false;
 
                 std::cout << "[ClassicMMO] Runtime initialized" << std::endl;
 
@@ -445,6 +602,7 @@ return "";
 #endif
 		ResetLastPlayerPosition();
 		g_sent_test_chat = false;
+                g_character_creation_request_sent = false;
 
 		g_initialized = false;
 
@@ -460,6 +618,7 @@ return "";
 
 		g_network_client.Update();
 		ApplyPendingSpawnOverride();
+                ProcessCharacterCreationPersistence();
 		SendPlayerPositionIfChanged();
 	}
 

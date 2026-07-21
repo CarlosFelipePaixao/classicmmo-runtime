@@ -7,6 +7,7 @@ const {
   loadCharacterByName,
   loadFirstCharacterForUser,
   loadCharacterByIdForUser,
+  createCharacterForUser,
   saveCharacterPositionById,
   loadSpawnForCharacter,
   loadSpawnForNewCharacter
@@ -110,6 +111,58 @@ function readPositionMessage(message) {
   };
 }
 
+// LUMNIA_CHARACTER_PERSISTENCE
+function readCharacterCreationRequest(position) {
+  const prefix = "create_character:";
+  const mode = String(position && position.gameMode || "");
+
+  if (!mode.startsWith(prefix)) {
+    return null;
+  }
+
+  const values = mode
+    .slice(prefix.length)
+    .split(":")
+    .map((value) => Number(value));
+
+  if (
+    values.length !== 4 ||
+    values.some((value) => !Number.isInteger(value))
+  ) {
+    return {
+      invalid: true
+    };
+  }
+
+  return {
+    invalid: false,
+    skin: values[0],
+    eyes: values[1],
+    classId: values[2],
+    hair: values[3]
+  };
+}
+
+function sendCharacterCreationResult(socket, ok, position, character, errorMessage) {
+  send(socket, {
+    type: "spawn_override",
+    spawnKey: ok ? "character_created" : "character_creation_error",
+    reason: ok ? "character_created" : "character_creation_error",
+    mapId: String(position.mapId),
+    x: Number(position.x),
+    y: Number(position.y),
+    direction: String(position.direction || "down"),
+    spriteName: ok
+      ? String(character && character.sprite_name || position.spriteName || "")
+      : "",
+    spriteIndex: ok && character && Number.isInteger(character.sprite_index)
+      ? character.sprite_index
+      : Number(position.spriteIndex) || 0,
+    characterId: ok && character ? character.id : null,
+    message: ok ? "" : String(errorMessage || "Falha ao criar personagem.")
+  });
+}
+
 function sendSpawnOverride(socket, spawn) {
   if (!spawn) {
     return;
@@ -127,7 +180,11 @@ function sendSpawnOverride(socket, spawn) {
       mapId: spawn.mapId,
       x: spawn.x,
       y: spawn.y,
-      direction: spawn.direction
+      direction: spawn.direction,
+      spriteName: String(spawn.spriteName || ""),
+      spriteIndex: Number.isInteger(spawn.spriteIndex)
+        ? spawn.spriteIndex
+        : 0
     });
   }, SPAWN_OVERRIDE_DELAY_MS);
 }
@@ -295,6 +352,83 @@ server.on("connection", (socket) => {
 
       if (!identityOk) {
         return;
+      }
+
+      const creationRequest = readCharacterCreationRequest(position);
+
+      if (creationRequest) {
+        if (creationRequest.invalid || !socket.classicmmoUserId) {
+          sendCharacterCreationResult(
+            socket,
+            false,
+            position,
+            null,
+            "Pedido de criação inválido."
+          );
+          return;
+        }
+
+        if (socket.classicmmoCharacterCreating) {
+          return;
+        }
+
+        socket.classicmmoCharacterCreating = true;
+
+        try {
+          const result = await createCharacterForUser(
+            socket.classicmmoUserId,
+            {
+              name: position.playerName,
+              skin: creationRequest.skin,
+              eyes: creationRequest.eyes,
+              classId: creationRequest.classId,
+              hair: creationRequest.hair,
+              spriteName: position.spriteName,
+              spriteIndex: position.spriteIndex
+            }
+          );
+
+          const character = result.character;
+
+          socket.classicmmoCharacterId = character.id;
+          socket.classicmmoPlayerName = character.name;
+
+          console.log("[auth] criação de personagem concluída:", {
+            userId: socket.classicmmoUserId,
+            characterId: character.id,
+            name: character.name,
+            created: result.created,
+            appearance: character.appearance,
+            spriteName: character.sprite_name,
+            spriteIndex: character.sprite_index
+          });
+
+          sendCharacterCreationResult(
+            socket,
+            true,
+            position,
+            character,
+            ""
+          );
+        } catch (error) {
+          console.error(
+            "[auth] erro ao criar personagem:",
+            error && error.message ? error.message : error
+          );
+
+          sendCharacterCreationResult(
+            socket,
+            false,
+            position,
+            null,
+            error && error.message
+              ? error.message
+              : "Falha ao criar personagem."
+          );
+          return;
+        } finally {
+          socket.classicmmoCharacterCreating = false;
+        }
       }
 
       const hadPlayerState = players.has(clientId);
