@@ -71,6 +71,54 @@
 #include "baseui.h"
 #include "algo.h"
 
+
+// LUMNIA: debounce forte do Key Input da criacao de personagem.
+// Escopo propositalmente limitado ao Map0003 + variavel 0006 (CC_Tecla).
+namespace {
+constexpr int LUMNIA_CC_MAP_ID = 3;
+constexpr int LUMNIA_CC_KEY_VARIABLE_ID = 6;
+constexpr int LUMNIA_CC_INPUT_COOLDOWN_POLLS = 24;
+
+bool LumniaAnyCharacterCreationButtonPressed() {
+	return Input::IsPressed(Input::LEFT)
+		|| Input::IsPressed(Input::RIGHT)
+		|| Input::IsPressed(Input::DECISION)
+		|| Input::IsPressed(Input::CANCEL);
+}
+
+int LumniaDebounceCharacterCreationKeyInput(int key, int variable_id) {
+	if (variable_id != LUMNIA_CC_KEY_VARIABLE_ID || Game_Map::GetMapId() != LUMNIA_CC_MAP_ID) {
+		return key;
+	}
+
+	static int cooldown_polls = 0;
+	static bool waiting_for_full_release = false;
+
+	const bool any_button_pressed = LumniaAnyCharacterCreationButtonPressed();
+	if (!any_button_pressed) {
+		waiting_for_full_release = false;
+	}
+
+	if (cooldown_polls > 0) {
+		--cooldown_polls;
+		return 0;
+	}
+
+	if (key == 0) {
+		return 0;
+	}
+
+	if (waiting_for_full_release) {
+		return 0;
+	}
+
+	cooldown_polls = LUMNIA_CC_INPUT_COOLDOWN_POLLS;
+	waiting_for_full_release = true;
+	return key;
+}
+} // namespace
+
+
 using namespace Game_Interpreter_Shared;
 
 enum BranchSubcommand {
@@ -466,7 +514,7 @@ void Game_Interpreter::Update(bool reset_loop_count) {
 				break;
 			}
 
-			const int key = _keyinput.CheckInput();
+			const int key = LumniaDebounceCharacterCreationKeyInput(_keyinput.CheckInput(), _keyinput.variable);
 			Main_Data::game_variables->Set(_keyinput.variable, key);
 			Game_Map::SetNeedRefreshForVarChange(_keyinput.variable);
 			RuntimePatches::OnVariableChanged(_keyinput.variable);
@@ -3387,7 +3435,7 @@ bool Game_Interpreter::CommandKeyInputProc(lcf::rpg::EventCommand const& com) { 
 		return true;
 	}
 
-	int key = _keyinput.CheckInput();
+	int key = LumniaDebounceCharacterCreationKeyInput(_keyinput.CheckInput(), _keyinput.variable);
 	Main_Data::game_variables->Set(_keyinput.variable, key);
 	Game_Map::SetNeedRefreshForVarChange(_keyinput.variable);
 	RuntimePatches::OnVariableChanged(_keyinput.variable);
