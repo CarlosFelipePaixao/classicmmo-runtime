@@ -592,11 +592,7 @@ namespace classicmmo
                                                         !local_character_id.empty() &&
                                                         it->second.character_id == local_character_id;
 
-                                                const bool same_name =
-                                                        !local_player_name.empty() &&
-                                                        it->second.player_name == local_player_name;
-
-                                                if (same_character || same_name)
+                                                if (same_character)
                                                 {
                                                         it = remote_players.erase(it);
                                                 }
@@ -673,11 +669,7 @@ namespace classicmmo
                                 !local_character_id.empty() &&
                                 player.character_id == local_character_id;
 
-                        const bool same_name =
-                                !local_player_name.empty() &&
-                                player.player_name == local_player_name;
-
-                        if (same_client || same_character || same_name)
+                        if (same_client || same_character)
                         {
                                 continue;
                         }
@@ -698,11 +690,7 @@ namespace classicmmo
                         !local_character_id.empty() &&
                         player.character_id == local_character_id;
 
-                const bool same_name =
-                        !local_player_name.empty() &&
-                        player.player_name == local_player_name;
-
-                if (same_client || same_character || same_name)
+                if (same_client || same_character)
                 {
                         remote_players.erase(player.client_id);
                         return;
