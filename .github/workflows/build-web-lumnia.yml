@@ -1,0 +1,190 @@
+name: Build Lumnia Web Player
+
+on:
+  push:
+    branches:
+      - lumnia/save-personagem-supabase
+    paths:
+      - ".github/workflows/build-web-lumnia.yml"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "builds/cmake/**"
+      - "src/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lumnia-web-player-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-web:
+    name: Emscripten SDL3 Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+
+    env:
+      BUILDSCRIPTS_DIR: ${{ github.workspace }}/.cache/easyrpg-buildscripts
+      BUILDSCRIPTS_COMMIT: 2bbf1be415f8b5be1cfea9768d96dad82eed18f4
+      EMSCRIPTEN_VERSION: 5.0.5
+      BUILD_PRESET: emscripten-sdl3-release
+      ARTIFACT_DIR: ${{ github.workspace }}/lumnia-web-player
+
+    steps:
+      - name: Baixar o código do Lumnia
+        uses: actions/checkout@v6
+
+      - name: Instalar ferramentas do runner
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bison \
+            build-essential \
+            cmake \
+            curl \
+            flex \
+            gettext \
+            git \
+            gperf \
+            libtool \
+            libtool-bin \
+            meson \
+            nasm \
+            ninja-build \
+            patch \
+            perl \
+            pkg-config \
+            python3 \
+            python3-pip \
+            texinfo \
+            unzip \
+            wget \
+            xz-utils
+
+      - name: Restaurar dependências do EasyRPG
+        id: cache-dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BUILDSCRIPTS_DIR }}
+          key: easyrpg-emscripten-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.BUILDSCRIPTS_COMMIT }}-v1
+
+      - name: Compilar dependências do EasyRPG
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf "$BUILDSCRIPTS_DIR"
+
+          git clone \
+            https://github.com/EasyRPG/buildscripts.git \
+            "$BUILDSCRIPTS_DIR"
+
+          git -C "$BUILDSCRIPTS_DIR" checkout "$BUILDSCRIPTS_COMMIT"
+
+          cd "$BUILDSCRIPTS_DIR/emscripten"
+
+          export BUILD_LIBLCF=1
+
+          ./0_build_everything.sh
+
+          touch "$BUILDSCRIPTS_DIR/.lumnia-emscripten-ready"
+
+      - name: Validar dependências restauradas
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          test -f \
+            "$BUILDSCRIPTS_DIR/emscripten/emsdk-portable/emsdk_env.sh"
+
+          test -f \
+            "$BUILDSCRIPTS_DIR/.lumnia-emscripten-ready"
+
+      - name: Configurar o Player
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          source \
+            "$BUILDSCRIPTS_DIR/emscripten/emsdk-portable/emsdk_env.sh"
+
+          export EASYRPG_BUILDSCRIPTS="$BUILDSCRIPTS_DIR"
+
+          rm -rf "build/$BUILD_PRESET"
+
+          cmake \
+            --preset "$BUILD_PRESET" \
+            -DPLAYER_BUILD_LIBLCF=OFF \
+            -DPLAYER_JS_OUTPUT_NAME=easyrpg-player
+
+      - name: Compilar o Player
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          source \
+            "$BUILDSCRIPTS_DIR/emscripten/emsdk-portable/emsdk_env.sh"
+
+          export EASYRPG_BUILDSCRIPTS="$BUILDSCRIPTS_DIR"
+
+          cmake \
+            --build \
+            --preset "$BUILD_PRESET" \
+            --parallel 2
+
+      - name: Validar e separar os arquivos web
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          BUILD_DIR="$GITHUB_WORKSPACE/build/$BUILD_PRESET"
+
+          test -s "$BUILD_DIR/easyrpg-player.js"
+          test -s "$BUILD_DIR/easyrpg-player.wasm"
+
+          node --check "$BUILD_DIR/easyrpg-player.js"
+
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+
+          find "$BUILD_DIR" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+              -name "easyrpg-player.html" \
+              -o -name "easyrpg-player.js" \
+              -o -name "easyrpg-player.wasm" \
+              -o -name "easyrpg-player.worker.js" \
+              -o -name "easyrpg-player.data" \
+            \) \
+            -exec cp {} "$ARTIFACT_DIR/" \;
+
+          cat > "$ARTIFACT_DIR/BUILD-INFO.txt" <<EOF
+          Lumnia Web Player
+          Commit: $GITHUB_SHA
+          Branch: $GITHUB_REF_NAME
+          Preset: $BUILD_PRESET
+          Emscripten: $EMSCRIPTEN_VERSION
+          EasyRPG buildscripts: $BUILDSCRIPTS_COMMIT
+          Runner: $RUNNER_OS
+          EOF
+
+          ls -lh "$ARTIFACT_DIR"
+
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v6
+        with:
+          name: lumnia-web-player-${{ github.sha }}
+          path: ${{ env.ARTIFACT_DIR }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
