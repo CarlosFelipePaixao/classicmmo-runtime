@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 const crypto = require("crypto");
 const { resolveCharacterSprite } = require("./appearance_sprite");
 const http = require("http");
@@ -27,6 +27,7 @@ const server = new WebSocket.Server({
 
 const clients = new Map();
 const players = new Map();
+const characterCreationLocks = new Map();
 
 function send(socket, message) {
   if (socket.readyState === WebSocket.OPEN) {
@@ -81,6 +82,155 @@ function getStateSnapshot(exceptClientId) {
   return snapshot;
 }
 
+
+
+function buildSafeSpawnCandidates(spawn) {
+  const candidates = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+    { x: 1, y: 1 },
+    { x: -1, y: 1 },
+    { x: 1, y: -1 },
+    { x: -1, y: -1 },
+    { x: 2, y: 0 },
+    { x: -2, y: 0 },
+    { x: 0, y: 2 },
+    { x: 0, y: -2 },
+    { x: 2, y: 1 },
+    { x: -2, y: 1 },
+    { x: 2, y: -1 },
+    { x: -2, y: -1 }
+  ];
+
+  return candidates.map((offset) => ({
+    ...spawn,
+    x: Number(spawn.x) + offset.x,
+    y: Number(spawn.y) + offset.y
+  }));
+}
+
+function chooseSafeSpawn(spawn, exceptClientId) {
+  if (!spawn || !spawn.mapId) {
+    return spawn;
+  }
+
+  const occupied = new Set();
+
+  for (const [clientId, player] of players.entries()) {
+    if (clientId === exceptClientId) {
+      continue;
+    }
+
+    if (String(player.mapId) !== String(spawn.mapId)) {
+      continue;
+    }
+
+    occupied.add(
+      `${Number(player.x)},${Number(player.y)}`
+    );
+  }
+
+  const candidates =
+    buildSafeSpawnCandidates(spawn);
+
+  const available = candidates.find(
+    (candidate) =>
+      !occupied.has(
+        `${candidate.x},${candidate.y}`
+      )
+  );
+
+  return {
+    ...(available || spawn),
+    safeSpawn:
+      Boolean(available)
+  };
+}
+
+function rememberAuthoritativeIdentity(
+  socket,
+  character,
+  spawn
+) {
+  const resolvedSprite =
+    character
+      ? resolveCharacterSprite(character)
+      : {
+          spriteName:
+            String(spawn && spawn.spriteName || ""),
+          spriteIndex:
+            Number.isInteger(
+              spawn && spawn.spriteIndex
+            )
+              ? spawn.spriteIndex
+              : 0
+        };
+
+  socket.classicmmoAuthoritativeSpriteName =
+    resolvedSprite.spriteName;
+
+  socket.classicmmoAuthoritativeSpriteIndex =
+    resolvedSprite.spriteIndex;
+
+  socket.classicmmoInitialSpawn =
+    spawn
+      ? {
+          mapId: String(spawn.mapId),
+          x: Number(spawn.x),
+          y: Number(spawn.y),
+          direction:
+            normalizeDirection(spawn.direction)
+        }
+      : null;
+
+  socket.classicmmoInitialSpawnPending =
+    Boolean(socket.classicmmoInitialSpawn);
+}
+
+async function createCharacterSerially(
+  userId,
+  payload
+) {
+  while (characterCreationLocks.has(userId)) {
+    try {
+      await characterCreationLocks.get(userId);
+    }
+    catch (_) {
+      // A próxima tentativa ainda deve consultar o banco.
+    }
+  }
+
+  let releaseLock = null;
+
+  const lock = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+
+  characterCreationLocks.set(
+    userId,
+    lock
+  );
+
+  try {
+    return await createCharacterForUser(
+      userId,
+      payload
+    );
+  }
+  finally {
+    if (
+      characterCreationLocks.get(userId) ===
+      lock
+    ) {
+      characterCreationLocks.delete(userId);
+    }
+
+    releaseLock();
+  }
+}
 
 function closeOlderAuthenticatedSessions(currentSocket, userId) {
   if (!userId) {
@@ -263,8 +413,22 @@ async function resolveIdentity(socket, position) {
       socket.classicmmoCharacterId = character.id;
       socket.classicmmoPlayerName = character.name;
 
-      const spawn = await loadSpawnForCharacter(character);
-      spawn.characterId = character.id;
+      const baseSpawn =
+        await loadSpawnForCharacter(character);
+
+      const spawn = chooseSafeSpawn(
+        {
+          ...baseSpawn,
+          characterId: character.id
+        },
+        socket.classicmmoClientId
+      );
+
+      rememberAuthoritativeIdentity(
+        socket,
+        character,
+        spawn
+      );
 
       console.log("[auth] usuário autenticado com personagem:", {
         userId: authUser.id,
@@ -280,7 +444,16 @@ async function resolveIdentity(socket, position) {
     socket.classicmmoCharacterId = null;
     socket.classicmmoPlayerName = position.playerName || "NovoHeroi";
 
-    const spawn = loadSpawnForNewCharacter();
+    const spawn = chooseSafeSpawn(
+      loadSpawnForNewCharacter(),
+      socket.classicmmoClientId
+    );
+
+    rememberAuthoritativeIdentity(
+      socket,
+      null,
+      spawn
+    );
 
     console.log("[auth] usuário autenticado sem personagem:", {
       userId: authUser.id,
@@ -300,7 +473,22 @@ async function resolveIdentity(socket, position) {
       socket.classicmmoCharacterId = character.id;
       socket.classicmmoPlayerName = character.name;
 
-      const spawn = await loadSpawnForCharacter(character);
+      const baseSpawn =
+        await loadSpawnForCharacter(character);
+
+      const spawn = chooseSafeSpawn(
+        {
+          ...baseSpawn,
+          characterId: character.id
+        },
+        socket.classicmmoClientId
+      );
+
+      rememberAuthoritativeIdentity(
+        socket,
+        character,
+        spawn
+      );
 
       console.log("[legacy] personagem por nome:", {
         characterId: character.id,
@@ -482,6 +670,8 @@ async function handleHttpRequest(request, response) {
       writeJson(response, 200, {
         ok: true,
         hasCharacter: Boolean(character),
+        destination:
+          character ? "game" : "creator",
         character:
           serializeCharacter(character)
       });
@@ -508,7 +698,7 @@ async function handleHttpRequest(request, response) {
         await readJsonBody(request);
 
       const result =
-        await createCharacterForUser(
+        await createCharacterSerially(
           authUser.id,
           payload
         );
@@ -643,7 +833,7 @@ server.on("connection", (socket) => {
         socket.classicmmoCharacterCreating = true;
 
         try {
-          const result = await createCharacterForUser(
+          const result = await createCharacterSerially(
             socket.classicmmoUserId,
             {
               name: position.playerName,
@@ -660,6 +850,15 @@ server.on("connection", (socket) => {
 
           socket.classicmmoCharacterId = character.id;
           socket.classicmmoPlayerName = character.name;
+
+          const creationSprite =
+            resolveCharacterSprite(character);
+
+          socket.classicmmoAuthoritativeSpriteName =
+            creationSprite.spriteName;
+
+          socket.classicmmoAuthoritativeSpriteIndex =
+            creationSprite.spriteIndex;
 
           console.log("[auth] criação de personagem concluída:", {
             userId: socket.classicmmoUserId,
@@ -701,19 +900,51 @@ server.on("connection", (socket) => {
 
       const hadPlayerState = players.has(clientId);
 
+      const initialSpawn =
+        socket.classicmmoInitialSpawnPending
+          ? socket.classicmmoInitialSpawn
+          : null;
+
       const currentPlayer = {
         clientId,
-        characterId: socket.classicmmoCharacterId || position.characterId || "",
-        mapId: position.mapId,
-        x: position.x,
-        y: position.y,
-        direction: position.direction,
-        spriteName: position.spriteName,
-        spriteIndex: position.spriteIndex,
-        playerName: socket.classicmmoPlayerName || position.playerName || "Player",
+        characterId:
+          socket.classicmmoCharacterId ||
+          position.characterId ||
+          "",
+        mapId:
+          initialSpawn
+            ? initialSpawn.mapId
+            : position.mapId,
+        x:
+          initialSpawn
+            ? initialSpawn.x
+            : position.x,
+        y:
+          initialSpawn
+            ? initialSpawn.y
+            : position.y,
+        direction:
+          initialSpawn
+            ? initialSpawn.direction
+            : position.direction,
+        spriteName:
+          socket.classicmmoAuthoritativeSpriteName ||
+          position.spriteName,
+        spriteIndex:
+          Number.isInteger(
+            socket.classicmmoAuthoritativeSpriteIndex
+          )
+            ? socket.classicmmoAuthoritativeSpriteIndex
+            : position.spriteIndex,
+        playerName:
+          socket.classicmmoPlayerName ||
+          position.playerName ||
+          "Player",
         chatText: "",
         chatTimer: 0
       };
+
+      socket.classicmmoInitialSpawnPending = false;
 
       players.set(clientId, currentPlayer);
       socket.classicmmoLastPlayerState = currentPlayer;

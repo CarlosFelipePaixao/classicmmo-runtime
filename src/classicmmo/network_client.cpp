@@ -2,6 +2,7 @@
 
 #include "network_message.h"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -136,10 +137,17 @@ namespace classicmmo
 
                 EM_BOOL ClassicMMOOnWebSocketClose(
                         int,
-                        const EmscriptenWebSocketCloseEvent *,
+                        const EmscriptenWebSocketCloseEvent *event,
                         void *user_data)
                 {
-                        static_cast<NetworkClient *>(user_data)->HandleWebSocketClose();
+                        const int close_code =
+                                event
+                                        ? event->code
+                                        : 1006;
+
+                        static_cast<NetworkClient *>(user_data)
+                                ->HandleWebSocketClose(close_code);
+
                         return EM_TRUE;
                 }
 
@@ -177,40 +185,90 @@ namespace classicmmo
 
         bool NetworkClient::Connect(const std::string &server_url)
         {
-                if (connected.load())
+                if (server_url.empty())
+                {
+                        return false;
+                }
+
+                if (connected.load() || connecting.load())
                 {
                         return true;
                 }
 
                 url = server_url;
+                manual_disconnect.store(false);
+                reconnect_pending.store(false);
+                connecting.store(true);
 
 #if defined(CLASSICMMO_HAS_IXWEBSOCKET)
+                if (socket)
+                {
+                        socket->stop();
+                        socket.reset();
+                }
+
                 socket = std::make_unique<ix::WebSocket>();
                 socket->setUrl(url);
 
-                socket->setOnMessageCallback([this](const ix::WebSocketMessagePtr &msg)
-                                                                         {
-                if (msg->type == ix::WebSocketMessageType::Open) {
-                        connected.store(true);
-                        ClassicLog("[ClassicMMO] Connected to " + url);
-                        return;
-                }
+                socket->setOnMessageCallback(
+                        [this](const ix::WebSocketMessagePtr &msg)
+                        {
+                                if (msg->type == ix::WebSocketMessageType::Open)
+                                {
+                                        connected.store(true);
+                                        connecting.store(false);
+                                        reconnect_pending.store(false);
+                                        reconnect_attempt.store(0);
 
-                if (msg->type == ix::WebSocketMessageType::Close) {
-                        connected.store(false);
-                        ClassicLog("[ClassicMMO] Connection closed");
-                        return;
-                }
+                                        ClassicLog(
+                                                "[ClassicMMO] Connected to " +
+                                                url);
+                                        return;
+                                }
 
-                if (msg->type == ix::WebSocketMessageType::Error) {
-                        connected.store(false);
-                        ClassicLog("[ClassicMMO] WebSocket error: " + msg->errorInfo.reason);
-                        return;
-                }
+                                if (msg->type == ix::WebSocketMessageType::Close)
+                                {
+                                        connected.store(false);
+                                        connecting.store(false);
 
-                if (msg->type == ix::WebSocketMessageType::Message) {
-                        HandleServerMessage(msg->str);
-                } });
+                                        const int close_code =
+                                                msg->closeInfo.code;
+
+                                        ClassicLog(
+                                                "[ClassicMMO] Connection closed. code=" +
+                                                std::to_string(close_code));
+
+                                        if (close_code == 4001)
+                                        {
+                                                manual_disconnect.store(true);
+                                                reconnect_pending.store(false);
+                                        }
+                                        else
+                                        {
+                                                ScheduleReconnect();
+                                        }
+
+                                        return;
+                                }
+
+                                if (msg->type == ix::WebSocketMessageType::Error)
+                                {
+                                        connected.store(false);
+                                        connecting.store(false);
+
+                                        ClassicLog(
+                                                "[ClassicMMO] WebSocket error: " +
+                                                msg->errorInfo.reason);
+
+                                        ScheduleReconnect();
+                                        return;
+                                }
+
+                                if (msg->type == ix::WebSocketMessageType::Message)
+                                {
+                                        HandleServerMessage(msg->str);
+                                }
+                        });
 
                 socket->start();
 
@@ -220,9 +278,16 @@ namespace classicmmo
 #elif defined(__EMSCRIPTEN__)
                 if (!emscripten_websocket_is_supported())
                 {
+                        connecting.store(false);
+                        manual_disconnect.store(true);
                         ClassicLog("[ClassicMMO] Browser WebSocket is not supported");
-                        url.clear();
                         return false;
+                }
+
+                if (socket > 0)
+                {
+                        emscripten_websocket_delete(socket);
+                        socket = 0;
                 }
 
                 EmscriptenWebSocketCreateAttributes attributes;
@@ -238,27 +303,52 @@ namespace classicmmo
                 {
                         ClassicLog("[ClassicMMO] Browser WebSocket creation failed");
                         socket = 0;
-                        url.clear();
+                        connecting.store(false);
+                        ScheduleReconnect();
                         return false;
                 }
 
-                emscripten_websocket_set_onopen_callback(socket, this, ClassicMMOOnWebSocketOpen);
-                emscripten_websocket_set_onclose_callback(socket, this, ClassicMMOOnWebSocketClose);
-                emscripten_websocket_set_onerror_callback(socket, this, ClassicMMOOnWebSocketError);
-                emscripten_websocket_set_onmessage_callback(socket, this, ClassicMMOOnWebSocketMessage);
+                emscripten_websocket_set_onopen_callback(
+                        socket,
+                        this,
+                        ClassicMMOOnWebSocketOpen);
 
-                ClassicLog("[ClassicMMO] Browser WebSocket connecting to " + url);
+                emscripten_websocket_set_onclose_callback(
+                        socket,
+                        this,
+                        ClassicMMOOnWebSocketClose);
+
+                emscripten_websocket_set_onerror_callback(
+                        socket,
+                        this,
+                        ClassicMMOOnWebSocketError);
+
+                emscripten_websocket_set_onmessage_callback(
+                        socket,
+                        this,
+                        ClassicMMOOnWebSocketMessage);
+
+                ClassicLog(
+                        "[ClassicMMO] Browser WebSocket connecting to " +
+                        url);
 
                 return true;
 #else
+                connecting.store(false);
+                manual_disconnect.store(true);
                 ClassicLog("[ClassicMMO] Network support is not available in this build");
-                url.clear();
                 return false;
 #endif
         }
 
         void NetworkClient::Disconnect()
         {
+                manual_disconnect.store(true);
+                reconnect_pending.store(false);
+                reconnect_delay_frames.store(0);
+                reconnect_attempt.store(0);
+                connecting.store(false);
+
 #if defined(CLASSICMMO_HAS_IXWEBSOCKET)
                 if (socket)
                 {
@@ -268,7 +358,11 @@ namespace classicmmo
 #elif defined(__EMSCRIPTEN__)
                 if (socket > 0)
                 {
-                        emscripten_websocket_close(socket, 1000, "ClassicMMO shutdown");
+                        emscripten_websocket_close(
+                                socket,
+                                1000,
+                                "ClassicMMO shutdown");
+
                         emscripten_websocket_delete(socket);
                         socket = 0;
                 }
@@ -276,7 +370,9 @@ namespace classicmmo
 
                 if (connected.load())
                 {
-                        ClassicLog("[ClassicMMO] Disconnected from " + url);
+                        ClassicLog(
+                                "[ClassicMMO] Disconnected from " +
+                                url);
                 }
 
                 connected.store(false);
@@ -732,8 +828,78 @@ namespace classicmmo
                 existing->second.chat_timer = kChatBubbleFrames;
         }
 
+        void NetworkClient::ClearRemotePlayersAfterConnectionLoss()
+        {
+                std::lock_guard<std::mutex> lock(remote_players_mutex);
+                remote_players.clear();
+                local_client_id.clear();
+        }
+
+        void NetworkClient::ScheduleReconnect()
+        {
+                if (
+                        manual_disconnect.load() ||
+                        url.empty() ||
+                        reconnect_pending.load())
+                {
+                        return;
+                }
+
+                connected.store(false);
+                connecting.store(false);
+
+                ClearRemotePlayersAfterConnectionLoss();
+
+                const int attempt =
+                        std::min(
+                                reconnect_attempt.fetch_add(1),
+                                4);
+
+                const int delay_frames =
+                        std::min(
+                                60 * (1 << attempt),
+                                600);
+
+                reconnect_delay_frames.store(delay_frames);
+                reconnect_pending.store(true);
+
+                ClassicLog(
+                        "[ClassicMMO] Reconnect scheduled in " +
+                        std::to_string(delay_frames) +
+                        " frames");
+        }
+
         void NetworkClient::Update()
         {
+                if (
+                        reconnect_pending.load() &&
+                        !manual_disconnect.load() &&
+                        !connected.load() &&
+                        !connecting.load())
+                {
+                        const int remaining =
+                                reconnect_delay_frames.load();
+
+                        if (remaining > 0)
+                        {
+                                reconnect_delay_frames.store(
+                                        remaining - 1);
+                        }
+                        else
+                        {
+                                reconnect_pending.store(false);
+
+                                const std::string reconnect_url =
+                                        url;
+
+                                ClassicLog(
+                                        "[ClassicMMO] Reconnecting to " +
+                                        reconnect_url);
+
+                                Connect(reconnect_url);
+                        }
+                }
+
                 std::lock_guard<std::mutex> lock(remote_players_mutex);
 
                 for (auto &entry : remote_players)
@@ -756,19 +922,45 @@ namespace classicmmo
         void NetworkClient::HandleWebSocketOpen()
         {
                 connected.store(true);
-                ClassicLog("[ClassicMMO] Browser WebSocket connected to " + url);
+                connecting.store(false);
+                reconnect_pending.store(false);
+                reconnect_delay_frames.store(0);
+                reconnect_attempt.store(0);
+
+                ClassicLog(
+                        "[ClassicMMO] Browser WebSocket connected to " +
+                        url);
         }
 
-        void NetworkClient::HandleWebSocketClose()
+        void NetworkClient::HandleWebSocketClose(int close_code)
         {
                 connected.store(false);
-                ClassicLog("[ClassicMMO] Browser WebSocket closed");
+                connecting.store(false);
+
+                ClassicLog(
+                        "[ClassicMMO] Browser WebSocket closed. code=" +
+                        std::to_string(close_code));
+
+                if (close_code == 4001)
+                {
+                        manual_disconnect.store(true);
+                        reconnect_pending.store(false);
+                        ClearRemotePlayersAfterConnectionLoss();
+                        return;
+                }
+
+                ScheduleReconnect();
         }
 
         void NetworkClient::HandleWebSocketError()
         {
                 connected.store(false);
-                ClassicLog("[ClassicMMO] Browser WebSocket error");
+                connecting.store(false);
+
+                ClassicLog(
+                        "[ClassicMMO] Browser WebSocket error");
+
+                ScheduleReconnect();
         }
 
         void NetworkClient::HandleWebSocketMessage(const char *data, std::size_t size, bool is_text)

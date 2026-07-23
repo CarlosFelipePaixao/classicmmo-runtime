@@ -86,7 +86,7 @@ namespace classicmmo
 
 #if defined(__EMSCRIPTEN__)
                 void HandleWebSocketOpen();
-                void HandleWebSocketClose();
+                void HandleWebSocketClose(int close_code);
                 void HandleWebSocketError();
                 void HandleWebSocketMessage(const char *data, std::size_t size, bool is_text);
 #endif
@@ -97,6 +97,8 @@ namespace classicmmo
                 void UpsertRemotePlayer(const RemotePlayerState &player);
                 void RemoveRemotePlayer(const std::string &client_id);
                 void ApplyRemoteChat(const std::string &client_id, const std::string &text);
+                void ScheduleReconnect();
+                void ClearRemotePlayersAfterConnectionLoss();
 
 #if defined(CLASSICMMO_HAS_IXWEBSOCKET)
                 std::unique_ptr<ix::WebSocket> socket;
@@ -105,6 +107,11 @@ namespace classicmmo
 #endif
 
                 std::atomic_bool connected{false};
+                std::atomic_bool connecting{false};
+                std::atomic_bool manual_disconnect{true};
+                std::atomic_bool reconnect_pending{false};
+                std::atomic_int reconnect_delay_frames{0};
+                std::atomic_int reconnect_attempt{0};
                 std::string url;
 
                 mutable std::mutex remote_players_mutex;
