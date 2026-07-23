@@ -1,4 +1,5 @@
-const { createClient } = require("@supabase/supabase-js");
+﻿const { createClient } = require("@supabase/supabase-js");
+const { resolveAppearanceSprite, resolveCharacterSprite } = require("./appearance_sprite");
 
 let supabase = null;
 
@@ -120,6 +121,176 @@ function clampInteger(value, minimum, maximum, fallback) {
   return Math.max(minimum, Math.min(maximum, number));
 }
 
+function normalizeChoice(value, allowed, fallback) {
+  const normalized = String(value || "").trim();
+
+  if (allowed.includes(normalized)) {
+    return normalized;
+  }
+
+  return fallback;
+}
+
+function normalizeLegacyClass(value) {
+  const numeric = Number(value);
+  const legacyMap = {
+    1: "mage",
+    2: "warrior",
+    3: "rogue",
+    4: "healer"
+  };
+
+  return legacyMap[numeric] || "mage";
+}
+
+function normalizeLegacySkin(value) {
+  const number = clampInteger(value, 1, 5, 1);
+  return `skin-${String(number).padStart(2, "0")}`;
+}
+
+function normalizeLegacyEyes(value) {
+  const legacyMap = {
+    1: "eyes-blue",
+    2: "eyes-brown",
+    3: "eyes-green"
+  };
+
+  return legacyMap[Number(value)] || "eyes-blue";
+}
+
+function normalizeLegacyHair(value) {
+  const legacyMap = {
+    1: "hair-01",
+    2: "hair-02",
+    3: "none"
+  };
+
+  return legacyMap[Number(value)] || "hair-01";
+}
+
+function normalizeAppearance(characterData = {}) {
+  const classChoices = [
+    "warrior",
+    "rogue",
+    "mage",
+    "healer"
+  ];
+
+  const genderChoices = [
+    "male",
+    "female"
+  ];
+
+  const skinChoices = [
+    "skin-01",
+    "skin-02",
+    "skin-03",
+    "skin-04",
+    "skin-05"
+  ];
+
+  const eyeChoices = [
+    "eyes-blue",
+    "eyes-brown",
+    "eyes-green"
+  ];
+
+  const hairColorChoices = [
+    "hair-black",
+    "hair-brown",
+    "hair-blonde",
+    "hair-red",
+    "hair-purple"
+  ];
+
+  const maleHairChoices = [
+    "none",
+    "hair-01",
+    "hair-02",
+    "male-03",
+    "male-04",
+    "male-05",
+    "male-06",
+    "male-07",
+    "male-08"
+  ];
+
+  const femaleHairChoices = [
+    "none",
+    "female-01",
+    "female-02",
+    "female-03",
+    "female-04",
+    "female-05",
+    "female-06",
+    "female-07",
+    "female-08"
+  ];
+
+  const isLegacy =
+    Number.isInteger(Number(characterData.classId)) &&
+    !String(characterData.classId).includes("-");
+
+  const classId = isLegacy
+    ? normalizeLegacyClass(characterData.classId)
+    : normalizeChoice(
+        characterData.classId,
+        classChoices,
+        "mage"
+      );
+
+  const gender = normalizeChoice(
+    characterData.gender,
+    genderChoices,
+    "male"
+  );
+
+  const skin = isLegacy
+    ? normalizeLegacySkin(characterData.skin)
+    : normalizeChoice(
+        characterData.skin,
+        skinChoices,
+        "skin-01"
+      );
+
+  const eyes = isLegacy
+    ? normalizeLegacyEyes(characterData.eyes)
+    : normalizeChoice(
+        characterData.eyes,
+        eyeChoices,
+        "eyes-blue"
+      );
+
+  const allowedHair =
+    gender === "female"
+      ? femaleHairChoices
+      : maleHairChoices;
+
+  const hair = isLegacy
+    ? normalizeLegacyHair(characterData.hair)
+    : normalizeChoice(
+        characterData.hair,
+        allowedHair,
+        "none"
+      );
+
+  const hairColor = normalizeChoice(
+    characterData.hairColor,
+    hairColorChoices,
+    "hair-brown"
+  );
+
+  return {
+    schemaVersion: 2,
+    gender,
+    classId,
+    skin,
+    eyes,
+    hair,
+    hairColor
+  };
+}
+
 function normalizeCharacterName(rawName, userId) {
   let name = String(rawName || "")
     .normalize("NFKC")
@@ -153,20 +324,24 @@ async function createCharacterForUser(userId, characterData = {}) {
   }
 
   const client = getSupabaseClient();
+  const appearance = normalizeAppearance(characterData);
+  const resolvedSprite = resolveAppearanceSprite(appearance);
+  const spriteIndex = clampInteger(
+    characterData.spriteIndex,
+    0,
+    99,
+    0
+  );
 
-  const skin = clampInteger(characterData.skin, 1, 8, 1);
-  const eyes = clampInteger(characterData.eyes, 1, 3, 1);
-  const classId = clampInteger(characterData.classId, 1, 99, 1);
-  const hair = clampInteger(characterData.hair, 1, 3, 1);
-  const spriteIndex = clampInteger(characterData.spriteIndex, 0, 99, 0);
-
-  const baseName = normalizeCharacterName(characterData.name, userId);
-  const classKey = classId === 1 ? "mage" : "mage";
+  const baseName = normalizeCharacterName(
+    characterData.name,
+    userId
+  );
 
   const row = {
     user_id: userId,
     name: baseName,
-    class_key: classKey,
+    class_key: appearance.classId,
     level: 1,
     xp: 0,
     gold: 50,
@@ -174,14 +349,9 @@ async function createCharacterForUser(userId, characterData = {}) {
     current_x: 7,
     current_y: 15,
     current_direction: "right",
-    appearance: {
-      skin,
-      eyes,
-      class: classId,
-      hair
-    },
-    sprite_name: String(characterData.spriteName || ""),
-    sprite_index: spriteIndex
+    appearance,
+    sprite_name: resolvedSprite.spriteName,
+    sprite_index: resolvedSprite.spriteIndex
   };
 
   let result = await client
@@ -190,8 +360,12 @@ async function createCharacterForUser(userId, characterData = {}) {
     .select("*")
     .single();
 
-  if (result.error && result.error.code === "23505") {
-    const concurrentExisting = await loadFirstCharacterForUser(userId);
+  if (
+    result.error &&
+    result.error.code === "23505"
+  ) {
+    const concurrentExisting =
+      await loadFirstCharacterForUser(userId);
 
     if (concurrentExisting) {
       return {
@@ -204,7 +378,8 @@ async function createCharacterForUser(userId, characterData = {}) {
       .replace(/-/g, "")
       .slice(0, 5);
 
-    row.name = `${baseName.slice(0, 14)}_${suffix}`;
+    row.name =
+      `${baseName.slice(0, 14)}_${suffix}`;
 
     result = await client
       .from("characters")
@@ -262,6 +437,33 @@ async function saveCharacterPositionById(characterId, position) {
   console.log("[supabase] posição salva:", characterId, position.mapId, position.x, position.y);
 }
 
+async function loadLevelRankings(limit = 50) {
+  const client = getSupabaseClient();
+  const safeLimit = clampInteger(
+    limit,
+    1,
+    100,
+    50
+  );
+
+  const { data, error } = await client
+    .from("characters")
+    .select(
+      "id,name,class_key,level,sprite_name,sprite_index"
+    )
+    .order("level", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(
+      `Não foi possível carregar o ranking: ${error.message}`
+    );
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
 async function loadStoryFlag(characterId, flagKey) {
   if (!characterId || !flagKey) {
     return null;
@@ -310,7 +512,9 @@ async function loadSpawnForCharacter(character) {
     return loadSpawnForNewCharacter();
   }
 
-  const tutorialFlag = await loadStoryFlag(character.id, "tutorial.completed");
+    const resolvedSprite = resolveCharacterSprite(character);
+
+const tutorialFlag = await loadStoryFlag(character.id, "tutorial.completed");
 
   if (!isFlagTrue(tutorialFlag)) {
     return {
@@ -320,10 +524,8 @@ async function loadSpawnForCharacter(character) {
       x: 7,
       y: 16,
       direction: "down",
-      spriteName: String(character.sprite_name || ""),
-      spriteIndex: Number.isInteger(character.sprite_index)
-        ? character.sprite_index
-        : 0
+      spriteName: resolvedSprite.spriteName,
+      spriteIndex: resolvedSprite.spriteIndex
     };
   }
 
@@ -347,10 +549,8 @@ async function loadSpawnForCharacter(character) {
     x: point.x,
     y: point.y,
     direction: "down",
-    spriteName: String(character.sprite_name || ""),
-    spriteIndex: Number.isInteger(character.sprite_index)
-      ? character.sprite_index
-      : 0
+    spriteName: resolvedSprite.spriteName,
+      spriteIndex: resolvedSprite.spriteIndex
   };
 }
 
@@ -373,6 +573,7 @@ module.exports = {
   loadCharacterByIdForUser,
   createCharacterForUser,
   saveCharacterPositionById,
+  loadLevelRankings,
   loadStoryFlag,
   loadSpawnForCharacter,
   loadSpawnForNewCharacter

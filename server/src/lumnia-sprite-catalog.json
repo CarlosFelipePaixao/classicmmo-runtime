@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "atlasPrefix": "LumniaCC",
+  "singleSprite": {
+    "width": 72,
+    "height": 128
+  },
+  "atlas": {
+    "width": 288,
+    "height": 256,
+    "slots": 8,
+    "count": 615
+  },
+  "variantCount": 4920,
+  "directions": [
+    "up",
+    "right",
+    "down",
+    "left"
+  ],
+  "orders": {
+    "genders": [
+      "male",
+      "female"
+    ],
+    "classes": [
+      "warrior",
+      "rogue",
+      "mage",
+      "healer"
+    ],
+    "skins": [
+      "skin-01",
+      "skin-02",
+      "skin-03",
+      "skin-04",
+      "skin-05"
+    ],
+    "eyes": [
+      "eyes-blue",
+      "eyes-brown",
+      "eyes-green"
+    ],
+    "hairColors": [
+      "hair-black",
+      "hair-brown",
+      "hair-blonde",
+      "hair-red",
+      "hair-purple"
+    ],
+    "hairsByGender": {
+      "male": [
+        "hair-01",
+        "hair-02",
+        "male-03",
+        "male-04",
+        "male-05",
+        "male-06",
+        "male-07",
+        "male-08"
+      ],
+      "female": [
+        "female-01",
+        "female-02",
+        "female-03",
+        "female-04",
+        "female-05",
+        "female-06",
+        "female-07",
+        "female-08"
+      ]
+    }
+  },
+  "sampleMappings": [
+    {
+      "variantIndex": 0,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "none",
+      "hairColor": "hair-brown",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 0
+    },
+    {
+      "variantIndex": 1,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-01",
+      "hairColor": "hair-black",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 1
+    },
+    {
+      "variantIndex": 2,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-01",
+      "hairColor": "hair-brown",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 2
+    },
+    {
+      "variantIndex": 3,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-01",
+      "hairColor": "hair-blonde",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 3
+    },
+    {
+      "variantIndex": 4,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-01",
+      "hairColor": "hair-red",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 4
+    },
+    {
+      "variantIndex": 5,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-01",
+      "hairColor": "hair-purple",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 5
+    },
+    {
+      "variantIndex": 6,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-02",
+      "hairColor": "hair-black",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 6
+    },
+    {
+      "variantIndex": 7,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-02",
+      "hairColor": "hair-brown",
+      "spriteName": "LumniaCC0000",
+      "spriteIndex": 7
+    },
+    {
+      "variantIndex": 8,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-02",
+      "hairColor": "hair-blonde",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 0
+    },
+    {
+      "variantIndex": 9,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-02",
+      "hairColor": "hair-red",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 1
+    },
+    {
+      "variantIndex": 10,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "hair-02",
+      "hairColor": "hair-purple",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 2
+    },
+    {
+      "variantIndex": 11,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-03",
+      "hairColor": "hair-black",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 3
+    },
+    {
+      "variantIndex": 12,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-03",
+      "hairColor": "hair-brown",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 4
+    },
+    {
+      "variantIndex": 13,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-03",
+      "hairColor": "hair-blonde",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 5
+    },
+    {
+      "variantIndex": 14,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-03",
+      "hairColor": "hair-red",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 6
+    },
+    {
+      "variantIndex": 15,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-03",
+      "hairColor": "hair-purple",
+      "spriteName": "LumniaCC0001",
+      "spriteIndex": 7
+    },
+    {
+      "variantIndex": 16,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-04",
+      "hairColor": "hair-black",
+      "spriteName": "LumniaCC0002",
+      "spriteIndex": 0
+    },
+    {
+      "variantIndex": 17,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-04",
+      "hairColor": "hair-brown",
+      "spriteName": "LumniaCC0002",
+      "spriteIndex": 1
+    },
+    {
+      "variantIndex": 18,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-04",
+      "hairColor": "hair-blonde",
+      "spriteName": "LumniaCC0002",
+      "spriteIndex": 2
+    },
+    {
+      "variantIndex": 19,
+      "gender": "male",
+      "classId": "warrior",
+      "skin": "skin-01",
+      "eyes": "eyes-blue",
+      "hair": "male-04",
+      "hairColor": "hair-red",
+      "spriteName": "LumniaCC0002",
+      "spriteIndex": 3
+    }
+  ]
+}

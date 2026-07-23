@@ -1,5 +1,7 @@
-require("dotenv").config();
+﻿require("dotenv").config();
 const crypto = require("crypto");
+const { resolveCharacterSprite } = require("./appearance_sprite");
+const http = require("http");
 const WebSocket = require("ws");
 
 const {
@@ -9,6 +11,7 @@ const {
   loadCharacterByIdForUser,
   createCharacterForUser,
   saveCharacterPositionById,
+  loadLevelRankings,
   loadSpawnForCharacter,
   loadSpawnForNewCharacter
 } = require("./supabase_client");
@@ -17,7 +20,10 @@ const PORT = Number(process.env.PORT || 7777);
 // LUMNIA_LOGIN_SPRITE_GHOST_SERVER_FIX
 const SPAWN_OVERRIDE_DELAY_MS = Number(process.env.SPAWN_OVERRIDE_DELAY_MS || 0);
 
-const server = new WebSocket.Server({ port: PORT });
+const httpServer = http.createServer(handleHttpRequest);
+const server = new WebSocket.Server({
+  server: httpServer
+});
 
 const clients = new Map();
 const players = new Map();
@@ -316,6 +322,235 @@ async function resolveIdentity(socket, position) {
   return true;
 }
 
+function writeJson(response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers":
+      "Authorization, Content-Type",
+    "Access-Control-Allow-Methods":
+      "GET, POST, OPTIONS"
+  });
+
+  response.end(JSON.stringify(payload));
+}
+
+function readBearerToken(request) {
+  const header = String(
+    request.headers.authorization || ""
+  );
+
+  const match = header.match(
+    /^Bearer\s+(.+)$/i
+  );
+
+  return match ? match[1].trim() : "";
+}
+
+async function readJsonBody(request) {
+  const chunks = [];
+  let total = 0;
+  const maximum = 64 * 1024;
+
+  for await (const chunk of request) {
+    total += chunk.length;
+
+    if (total > maximum) {
+      throw new Error(
+        "Corpo da requisição excede 64 KB."
+      );
+    }
+
+    chunks.push(chunk);
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  const raw = Buffer
+    .concat(chunks)
+    .toString("utf8");
+
+  try {
+    return JSON.parse(raw);
+  }
+  catch (_) {
+    throw new Error(
+      "JSON inválido na requisição."
+    );
+  }
+}
+
+function serializeCharacter(character) {
+  if (!character) {
+    return null;
+  }
+
+  const appearance =
+    character.appearance &&
+    typeof character.appearance === "object"
+      ? character.appearance
+      : {};
+
+  const resolvedSprite = resolveCharacterSprite({
+    ...character,
+    appearance
+  });
+
+  return {
+    id: character.id,
+    name: character.name,
+    class_key: character.class_key,
+    level: Number(character.level) || 1,
+    appearance,
+    sprite_name: resolvedSprite.spriteName,
+    sprite_index: resolvedSprite.spriteIndex
+  };
+}
+
+async function authenticateHttpRequest(request) {
+  const token = readBearerToken(request);
+
+  if (!token) {
+    return null;
+  }
+
+  return loadAuthUserFromToken(token);
+}
+
+async function handleHttpRequest(request, response) {
+  if (request.method === "OPTIONS") {
+    writeJson(response, 204, {});
+    return;
+  }
+
+  const requestUrl = new URL(
+    request.url || "/",
+    "http://localhost"
+  );
+
+  try {
+    if (
+      request.method === "GET" &&
+      requestUrl.pathname === "/health"
+    ) {
+      writeJson(response, 200, {
+        ok: true,
+        service: "lumnia-server"
+      });
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      requestUrl.pathname === "/rankings/level"
+    ) {
+      const rankings = await loadLevelRankings(
+        requestUrl.searchParams.get("limit")
+      );
+
+      writeJson(response, 200, {
+        ok: true,
+        rankings
+      });
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      requestUrl.pathname ===
+        "/api/character/status"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(request);
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error: "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const character =
+        await loadFirstCharacterForUser(
+          authUser.id
+        );
+
+      writeJson(response, 200, {
+        ok: true,
+        hasCharacter: Boolean(character),
+        character:
+          serializeCharacter(character)
+      });
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      requestUrl.pathname ===
+        "/api/characters"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(request);
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error: "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const payload =
+        await readJsonBody(request);
+
+      const result =
+        await createCharacterForUser(
+          authUser.id,
+          payload
+        );
+
+      writeJson(
+        response,
+        result.created ? 201 : 200,
+        {
+          ok: true,
+          created: result.created,
+          character:
+            serializeCharacter(
+              result.character
+            )
+        }
+      );
+      return;
+    }
+
+    writeJson(response, 404, {
+      ok: false,
+      error: "Rota não encontrada."
+    });
+  }
+  catch (error) {
+    console.error(
+      "[http] erro:",
+      error && error.message
+        ? error.message
+        : error
+    );
+
+    writeJson(response, 500, {
+      ok: false,
+      error:
+        error && error.message
+          ? error.message
+          : "Erro interno do servidor."
+    });
+  }
+}
+
 server.on("connection", (socket) => {
   const clientId = crypto.randomUUID();
 
@@ -547,4 +782,11 @@ server.on("connection", (socket) => {
   });
 });
 
-console.log(`ClassicMMO server listening on ws://localhost:${PORT}`);
+httpServer.listen(PORT, () => {
+  console.log(
+    `Lumnia server listening on http://localhost:${PORT}`
+  );
+  console.log(
+    `Lumnia websocket listening on ws://localhost:${PORT}`
+  );
+});
