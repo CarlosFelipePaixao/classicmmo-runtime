@@ -1,3 +1,53 @@
+const EQUIPMENT_SLOTS = Object.freeze({
+  1: "helmet",
+  2: "weapon",
+  3: "armor",
+  4: "shield",
+  5: "ring",
+  6: "boots",
+  7: "ring"
+});
+
+const EQUIPMENT_SLOT_LABELS = Object.freeze({
+  1: "Capacete",
+  2: "Arma",
+  3: "Armadura",
+  4: "Escudo",
+  5: "Anel esquerdo",
+  6: "Botas",
+  7: "Anel direito"
+});
+
+const CLASS_BASE_STATS = Object.freeze({
+  warrior: Object.freeze({
+    attack: 10,
+    defense: 8,
+    maxHp: 130,
+    maxMp: 35
+  }),
+
+  rogue: Object.freeze({
+    attack: 11,
+    defense: 5,
+    maxHp: 105,
+    maxMp: 50
+  }),
+
+  mage: Object.freeze({
+    attack: 5,
+    defense: 4,
+    maxHp: 90,
+    maxMp: 110
+  }),
+
+  healer: Object.freeze({
+    attack: 6,
+    defense: 6,
+    maxHp: 110,
+    maxMp: 95
+  })
+});
+
 const ITEM_CATALOG = Object.freeze({
   wooden_sword: Object.freeze({
     key: "wooden_sword",
@@ -9,7 +59,13 @@ const ITEM_CATALOG = Object.freeze({
     rarity: "common",
     stackable: false,
     maximumStack: 1,
-    iconKey: "wooden_sword"
+    iconKey: "wooden_sword",
+    stats: Object.freeze({
+      attack: 4,
+      defense: 0,
+      maxHp: 0,
+      maxMp: 0
+    })
   }),
 
   worn_tunic: Object.freeze({
@@ -22,7 +78,13 @@ const ITEM_CATALOG = Object.freeze({
     rarity: "common",
     stackable: false,
     maximumStack: 1,
-    iconKey: "worn_tunic"
+    iconKey: "worn_tunic",
+    stats: Object.freeze({
+      attack: 0,
+      defense: 3,
+      maxHp: 10,
+      maxMp: 0
+    })
   }),
 
   forest_herb: Object.freeze({
@@ -35,7 +97,13 @@ const ITEM_CATALOG = Object.freeze({
     rarity: "common",
     stackable: true,
     maximumStack: 99,
-    iconKey: "forest_herb"
+    iconKey: "forest_herb",
+    stats: Object.freeze({
+      attack: 0,
+      defense: 0,
+      maxHp: 0,
+      maxMp: 0
+    })
   }),
 
   copper_ore: Object.freeze({
@@ -48,7 +116,13 @@ const ITEM_CATALOG = Object.freeze({
     rarity: "common",
     stackable: true,
     maximumStack: 99,
-    iconKey: "copper_ore"
+    iconKey: "copper_ore",
+    stats: Object.freeze({
+      attack: 0,
+      defense: 0,
+      maxHp: 0,
+      maxMp: 0
+    })
   }),
 
   minor_health_potion: Object.freeze({
@@ -61,7 +135,13 @@ const ITEM_CATALOG = Object.freeze({
     rarity: "common",
     stackable: true,
     maximumStack: 20,
-    iconKey: "minor_health_potion"
+    iconKey: "minor_health_potion",
+    stats: Object.freeze({
+      attack: 0,
+      defense: 0,
+      maxHp: 0,
+      maxMp: 0
+    })
   }),
 
   minor_mana_potion: Object.freeze({
@@ -74,7 +154,13 @@ const ITEM_CATALOG = Object.freeze({
     rarity: "common",
     stackable: true,
     maximumStack: 20,
-    iconKey: "minor_mana_potion"
+    iconKey: "minor_mana_potion",
+    stats: Object.freeze({
+      attack: 0,
+      defense: 0,
+      maxHp: 0,
+      maxMp: 0
+    })
   })
 });
 
@@ -123,22 +209,61 @@ const STARTER_INVENTORY = Object.freeze([
 ]);
 
 function getItemDefinition(itemKey) {
-  return ITEM_CATALOG[String(itemKey || "")] || null;
+  return ITEM_CATALOG[
+    String(itemKey || "")
+  ] || null;
 }
 
-function canPlaceItemInContainer(itemKey, container) {
-  const item = getItemDefinition(itemKey);
+function getEquipmentSlotKey(slot) {
+  return EQUIPMENT_SLOTS[
+    Number(slot)
+  ] || "";
+}
+
+function getEquipmentSlotLabel(slot) {
+  return EQUIPMENT_SLOT_LABELS[
+    Number(slot)
+  ] || "Equipamento";
+}
+
+function canPlaceItemInSlot(
+  itemKey,
+  container,
+  slot
+) {
+  const item =
+    getItemDefinition(itemKey);
 
   if (!item) {
     return false;
   }
 
   if (container === "inventory") {
-    return true;
+    return (
+      Number.isInteger(Number(slot)) &&
+      Number(slot) >= 1 &&
+      Number(slot) <= 12
+    );
   }
 
   if (container === "potions") {
-    return item.category === "potion";
+    return (
+      item.category === "potion" &&
+      Number.isInteger(Number(slot)) &&
+      Number(slot) >= 1 &&
+      Number(slot) <= 6
+    );
+  }
+
+  if (container === "equipment") {
+    const targetSlot =
+      getEquipmentSlotKey(slot);
+
+    return (
+      item.category === "equipment" &&
+      Boolean(targetSlot) &&
+      item.equipmentSlot === targetSlot
+    );
   }
 
   return false;
@@ -159,15 +284,22 @@ function serializeInventoryRows(rows) {
         container: row.container,
         slot: Number(row.slot),
         itemKey: definition.key,
-        quantity: Number(row.quantity) || 1,
+        quantity:
+          Number(row.quantity) || 1,
         item: {
-          ...definition
+          ...definition,
+          stats: {
+            ...definition.stats
+          }
         }
       };
     })
     .filter(Boolean)
     .sort((left, right) => {
-      if (left.container !== right.container) {
+      if (
+        left.container !==
+        right.container
+      ) {
         return left.container.localeCompare(
           right.container
         );
@@ -177,10 +309,144 @@ function serializeInventoryRows(rows) {
     });
 }
 
+function normalizeStatValue(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.round(number)
+  );
+}
+
+function getBaseStatsForCharacter(
+  character = {}
+) {
+  const classKey =
+    String(
+      character.class_key ||
+      "warrior"
+    );
+
+  const base =
+    CLASS_BASE_STATS[classKey] ||
+    CLASS_BASE_STATS.warrior;
+
+  return {
+    attack: base.attack,
+    defense: base.defense,
+    maxHp: base.maxHp,
+    maxMp: base.maxMp
+  };
+}
+
+function calculateCharacterStats(
+  character,
+  rows
+) {
+  const base =
+    getBaseStatsForCharacter(
+      character
+    );
+
+  const equipmentBonus = {
+    attack: 0,
+    defense: 0,
+    maxHp: 0,
+    maxMp: 0
+  };
+
+  for (
+    const row of
+    Array.isArray(rows)
+      ? rows
+      : []
+  ) {
+    if (
+      row.container !==
+      "equipment"
+    ) {
+      continue;
+    }
+
+    const item =
+      getItemDefinition(
+        row.item_key
+      );
+
+    if (!item) {
+      continue;
+    }
+
+    for (
+      const key of [
+        "attack",
+        "defense",
+        "maxHp",
+        "maxMp"
+      ]
+    ) {
+      equipmentBonus[key] +=
+        normalizeStatValue(
+          item.stats &&
+          item.stats[key]
+        );
+    }
+  }
+
+  const total = {
+    attack:
+      base.attack +
+      equipmentBonus.attack,
+
+    defense:
+      base.defense +
+      equipmentBonus.defense,
+
+    maxHp:
+      base.maxHp +
+      equipmentBonus.maxHp,
+
+    maxMp:
+      base.maxMp +
+      equipmentBonus.maxMp
+  };
+
+  const level =
+    Math.max(
+      1,
+      Number(character.level) || 1
+    );
+
+  total.combatPower =
+    Math.round(
+      level * 10 +
+      total.attack * 3 +
+      total.defense * 3 +
+      total.maxHp / 5 +
+      total.maxMp / 5
+    );
+
+  return {
+    level,
+    base,
+    equipmentBonus,
+    total
+  };
+}
+
 module.exports = {
+  EQUIPMENT_SLOTS,
+  EQUIPMENT_SLOT_LABELS,
   ITEM_CATALOG,
   STARTER_INVENTORY,
   getItemDefinition,
-  canPlaceItemInContainer,
-  serializeInventoryRows
+  getEquipmentSlotKey,
+  getEquipmentSlotLabel,
+  canPlaceItemInSlot,
+  serializeInventoryRows,
+  calculateCharacterStats
 };

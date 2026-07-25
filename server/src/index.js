@@ -14,7 +14,7 @@ const {
   loadLevelRankings,
   loadSpawnForCharacter,
   loadSpawnForNewCharacter,
-  loadCharacterInventory,
+  loadCharacterInventoryState,
   moveCharacterInventoryItem
 } = require("./supabase_client");
 
@@ -714,22 +714,28 @@ async function handleHttpRequest(request, response) {
         return;
       }
 
-      const items =
-        await loadCharacterInventory(
-          character.id
+      const state =
+        await loadCharacterInventoryState(
+          character
         );
 
       writeJson(response, 200, {
         ok: true,
         character: {
           id: character.id,
-          name: character.name
+          name: character.name,
+          classKey:
+            character.class_key,
+          level:
+            Number(character.level) || 1
         },
         capacities: {
           inventory: 12,
-          potions: 6
+          potions: 6,
+          equipment: 7
         },
-        items
+        items: state.items,
+        stats: state.stats
       });
       return;
     }
@@ -770,9 +776,9 @@ async function handleHttpRequest(request, response) {
       const payload =
         await readJsonBody(request);
 
-      const items =
+      const state =
         await moveCharacterInventoryItem(
-          character.id,
+          character,
           payload
         );
 
@@ -780,13 +786,19 @@ async function handleHttpRequest(request, response) {
         ok: true,
         character: {
           id: character.id,
-          name: character.name
+          name: character.name,
+          classKey:
+            character.class_key,
+          level:
+            Number(character.level) || 1
         },
         capacities: {
           inventory: 12,
-          potions: 6
+          potions: 6,
+          equipment: 7
         },
-        items
+        items: state.items,
+        stats: state.stats
       });
       return;
     }

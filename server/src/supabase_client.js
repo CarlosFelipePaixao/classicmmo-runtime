@@ -3,8 +3,9 @@ const { resolveAppearanceSprite, resolveCharacterSprite } = require("./appearanc
 const {
   STARTER_INVENTORY,
   getItemDefinition,
-  canPlaceItemInContainer,
-  serializeInventoryRows
+  canPlaceItemInSlot,
+  serializeInventoryRows,
+  calculateCharacterStats
 } = require("./inventory_catalog");
 
 let supabase = null;
@@ -662,7 +663,77 @@ async function ensureStarterInventory(characterId) {
   return rows;
 }
 
-async function loadCharacterInventory(characterId) {
+async function saveCharacterStats(
+  characterId,
+  stats
+) {
+  const client = getSupabaseClient();
+
+  const { error } = await client
+    .from("character_stats")
+    .upsert(
+      {
+        character_id: characterId,
+        level: stats.level,
+        base_attack:
+          stats.base.attack,
+        base_defense:
+          stats.base.defense,
+        base_max_hp:
+          stats.base.maxHp,
+        base_max_mp:
+          stats.base.maxMp,
+        equipment_attack:
+          stats.equipmentBonus.attack,
+        equipment_defense:
+          stats.equipmentBonus.defense,
+        equipment_max_hp:
+          stats.equipmentBonus.maxHp,
+        equipment_max_mp:
+          stats.equipmentBonus.maxMp,
+        attack_power:
+          stats.total.attack,
+        defense_power:
+          stats.total.defense,
+        max_hp:
+          stats.total.maxHp,
+        max_mp:
+          stats.total.maxMp,
+        combat_power:
+          stats.total.combatPower,
+        updated_at:
+          new Date().toISOString()
+      },
+      {
+        onConflict:
+          "character_id"
+      }
+    );
+
+  if (error) {
+    const message = String(
+      error.message || ""
+    );
+
+    if (
+      message.includes(
+        "character_stats"
+      )
+    ) {
+      throw new Error(
+        "A migração dos equipamentos ainda não foi executada no Supabase."
+      );
+    }
+
+    throw new Error(
+      `Não foi possível salvar os atributos: ${message}`
+    );
+  }
+}
+
+async function loadCharacterInventory(
+  characterId
+) {
   if (!characterId) {
     return [];
   }
@@ -673,6 +744,43 @@ async function loadCharacterInventory(characterId) {
     );
 
   return serializeInventoryRows(rows);
+}
+
+async function loadCharacterInventoryState(
+  character
+) {
+  if (!character || !character.id) {
+    return {
+      items: [],
+      stats:
+        calculateCharacterStats(
+          character || {},
+          []
+        )
+    };
+  }
+
+  const rows =
+    await ensureStarterInventory(
+      character.id
+    );
+
+  const stats =
+    calculateCharacterStats(
+      character,
+      rows
+    );
+
+  await saveCharacterStats(
+    character.id,
+    stats
+  );
+
+  return {
+    items:
+      serializeInventoryRows(rows),
+    stats
+  };
 }
 
 async function loadCharacterInventorySlot(
@@ -708,7 +816,8 @@ function normalizeInventoryContainer(value) {
 
   if (
     container === "inventory" ||
-    container === "potions"
+    container === "potions" ||
+    container === "equipment"
   ) {
     return container;
   }
@@ -726,12 +835,20 @@ function normalizeInventorySlot(
     return 0;
   }
 
-  const maximum =
-    container === "potions"
-      ? 6
-      : 12;
+  const maximumByContainer = {
+    inventory: 12,
+    potions: 6,
+    equipment: 7
+  };
 
-  if (slot < 1 || slot > maximum) {
+  const maximum =
+    maximumByContainer[container] ||
+    0;
+
+  if (
+    slot < 1 ||
+    slot > maximum
+  ) {
     return 0;
   }
 
@@ -739,9 +856,12 @@ function normalizeInventorySlot(
 }
 
 async function moveCharacterInventoryItem(
-  characterId,
+  character,
   move
 ) {
+  const characterId =
+    character && character.id;
+
   const fromContainer =
     normalizeInventoryContainer(
       move && move.fromContainer
@@ -780,8 +900,8 @@ async function moveCharacterInventoryItem(
     fromContainer === toContainer &&
     fromSlot === toSlot
   ) {
-    return loadCharacterInventory(
-      characterId
+    return loadCharacterInventoryState(
+      character
     );
   }
 
@@ -805,13 +925,14 @@ async function moveCharacterInventoryItem(
 
   if (
     !sourceDefinition ||
-    !canPlaceItemInContainer(
+    !canPlaceItemInSlot(
       source.item_key,
-      toContainer
+      toContainer,
+      toSlot
     )
   ) {
     throw new Error(
-      "Esse item não pode ser colocado nesse painel."
+      "Esse item não é compatível com o slot escolhido."
     );
   }
 
@@ -824,9 +945,10 @@ async function moveCharacterInventoryItem(
 
   if (
     target &&
-    !canPlaceItemInContainer(
+    !canPlaceItemInSlot(
       target.item_key,
-      fromContainer
+      fromContainer,
+      fromSlot
     )
   ) {
     throw new Error(
@@ -853,8 +975,8 @@ async function moveCharacterInventoryItem(
     );
   }
 
-  return loadCharacterInventory(
-    characterId
+  return loadCharacterInventoryState(
+    character
   );
 }
 
@@ -871,5 +993,6 @@ module.exports = {
   loadSpawnForCharacter,
   loadSpawnForNewCharacter,
   loadCharacterInventory,
+  loadCharacterInventoryState,
   moveCharacterInventoryItem
 };
