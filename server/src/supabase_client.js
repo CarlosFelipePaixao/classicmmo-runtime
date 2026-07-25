@@ -970,8 +970,31 @@ async function moveCharacterInventoryItem(
   );
 
   if (error) {
+    const databaseMessage =
+      String(
+        error.message || ""
+      );
+
+    console.error(
+      "[Inventory] Falha ao mover item:",
+      error
+    );
+
+    if (
+      databaseMessage.includes(
+        "character_inventory_check"
+      ) ||
+      databaseMessage.includes(
+        "violates check constraint"
+      )
+    ) {
+      throw new Error(
+        "O banco ainda está com a regra antiga do inventário. Execute a migração SQL 003."
+      );
+    }
+
     throw new Error(
-      `Não foi possível mover o item: ${error.message}`
+      "Não foi possível salvar a alteração do inventário."
     );
   }
 
