@@ -1,5 +1,11 @@
 ﻿const { createClient } = require("@supabase/supabase-js");
 const { resolveAppearanceSprite, resolveCharacterSprite } = require("./appearance_sprite");
+const {
+  STARTER_INVENTORY,
+  getItemDefinition,
+  canPlaceItemInContainer,
+  serializeInventoryRows
+} = require("./inventory_catalog");
 
 let supabase = null;
 
@@ -565,6 +571,293 @@ function loadSpawnForNewCharacter() {
   };
 }
 
+
+async function queryCharacterInventoryRows(characterId) {
+  const client = getSupabaseClient();
+
+  const { data, error } = await client
+    .from("character_inventory")
+    .select(
+      "id,character_id,container,slot,item_key,quantity,created_at,updated_at"
+    )
+    .eq("character_id", characterId)
+    .neq("slot", 0)
+    .order("container", {
+      ascending: true
+    })
+    .order("slot", {
+      ascending: true
+    });
+
+  if (error) {
+    const message = String(
+      error.message || ""
+    );
+
+    if (
+      message.includes(
+        "character_inventory"
+      )
+    ) {
+      throw new Error(
+        "A migração do inventário ainda não foi executada no Supabase."
+      );
+    }
+
+    throw new Error(
+      `Não foi possível carregar o inventário: ${message}`
+    );
+  }
+
+  return Array.isArray(data)
+    ? data
+    : [];
+}
+
+async function ensureStarterInventory(characterId) {
+  let rows =
+    await queryCharacterInventoryRows(
+      characterId
+    );
+
+  if (rows.length > 0) {
+    return rows;
+  }
+
+  const client = getSupabaseClient();
+
+  const starterRows =
+    STARTER_INVENTORY.map(
+      (entry) => ({
+        character_id: characterId,
+        container: entry.container,
+        slot: entry.slot,
+        item_key: entry.itemKey,
+        quantity: entry.quantity
+      })
+    );
+
+  const { error } = await client
+    .from("character_inventory")
+    .upsert(
+      starterRows,
+      {
+        onConflict:
+          "character_id,container,slot",
+        ignoreDuplicates: true
+      }
+    );
+
+  if (error) {
+    throw new Error(
+      `Não foi possível criar o inventário inicial: ${error.message}`
+    );
+  }
+
+  rows =
+    await queryCharacterInventoryRows(
+      characterId
+    );
+
+  return rows;
+}
+
+async function loadCharacterInventory(characterId) {
+  if (!characterId) {
+    return [];
+  }
+
+  const rows =
+    await ensureStarterInventory(
+      characterId
+    );
+
+  return serializeInventoryRows(rows);
+}
+
+async function loadCharacterInventorySlot(
+  characterId,
+  container,
+  slot
+) {
+  const client = getSupabaseClient();
+
+  const { data, error } = await client
+    .from("character_inventory")
+    .select(
+      "id,character_id,container,slot,item_key,quantity"
+    )
+    .eq("character_id", characterId)
+    .eq("container", container)
+    .eq("slot", slot)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(
+      `Não foi possível consultar o slot: ${error.message}`
+    );
+  }
+
+  return data || null;
+}
+
+function normalizeInventoryContainer(value) {
+  const container =
+    String(value || "").trim();
+
+  if (
+    container === "inventory" ||
+    container === "potions"
+  ) {
+    return container;
+  }
+
+  return "";
+}
+
+function normalizeInventorySlot(
+  container,
+  value
+) {
+  const slot = Number(value);
+
+  if (!Number.isInteger(slot)) {
+    return 0;
+  }
+
+  const maximum =
+    container === "potions"
+      ? 6
+      : 12;
+
+  if (slot < 1 || slot > maximum) {
+    return 0;
+  }
+
+  return slot;
+}
+
+async function moveCharacterInventoryItem(
+  characterId,
+  move
+) {
+  const fromContainer =
+    normalizeInventoryContainer(
+      move && move.fromContainer
+    );
+
+  const toContainer =
+    normalizeInventoryContainer(
+      move && move.toContainer
+    );
+
+  const fromSlot =
+    normalizeInventorySlot(
+      fromContainer,
+      move && move.fromSlot
+    );
+
+  const toSlot =
+    normalizeInventorySlot(
+      toContainer,
+      move && move.toSlot
+    );
+
+  if (
+    !characterId ||
+    !fromContainer ||
+    !toContainer ||
+    !fromSlot ||
+    !toSlot
+  ) {
+    throw new Error(
+      "Movimento de inventário inválido."
+    );
+  }
+
+  if (
+    fromContainer === toContainer &&
+    fromSlot === toSlot
+  ) {
+    return loadCharacterInventory(
+      characterId
+    );
+  }
+
+  const source =
+    await loadCharacterInventorySlot(
+      characterId,
+      fromContainer,
+      fromSlot
+    );
+
+  if (!source) {
+    throw new Error(
+      "O item de origem não existe."
+    );
+  }
+
+  const sourceDefinition =
+    getItemDefinition(
+      source.item_key
+    );
+
+  if (
+    !sourceDefinition ||
+    !canPlaceItemInContainer(
+      source.item_key,
+      toContainer
+    )
+  ) {
+    throw new Error(
+      "Esse item não pode ser colocado nesse painel."
+    );
+  }
+
+  const target =
+    await loadCharacterInventorySlot(
+      characterId,
+      toContainer,
+      toSlot
+    );
+
+  if (
+    target &&
+    !canPlaceItemInContainer(
+      target.item_key,
+      fromContainer
+    )
+  ) {
+    throw new Error(
+      "Os itens desses slots não podem ser trocados."
+    );
+  }
+
+  const client = getSupabaseClient();
+
+  const { error } = await client.rpc(
+    "move_character_inventory_item",
+    {
+      p_character_id: characterId,
+      p_from_container: fromContainer,
+      p_from_slot: fromSlot,
+      p_to_container: toContainer,
+      p_to_slot: toSlot
+    }
+  );
+
+  if (error) {
+    throw new Error(
+      `Não foi possível mover o item: ${error.message}`
+    );
+  }
+
+  return loadCharacterInventory(
+    characterId
+  );
+}
+
 module.exports = {
   getSupabaseClient,
   loadAuthUserFromToken,
@@ -576,5 +869,7 @@ module.exports = {
   loadLevelRankings,
   loadStoryFlag,
   loadSpawnForCharacter,
-  loadSpawnForNewCharacter
+  loadSpawnForNewCharacter,
+  loadCharacterInventory,
+  moveCharacterInventoryItem
 };

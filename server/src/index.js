@@ -13,7 +13,9 @@ const {
   saveCharacterPositionById,
   loadLevelRankings,
   loadSpawnForCharacter,
-  loadSpawnForNewCharacter
+  loadSpawnForNewCharacter,
+  loadCharacterInventory,
+  moveCharacterInventoryItem
 } = require("./supabase_client");
 
 const PORT = Number(process.env.PORT || 7777);
@@ -674,6 +676,117 @@ async function handleHttpRequest(request, response) {
           character ? "game" : "creator",
         character:
           serializeCharacter(character)
+      });
+      return;
+    }
+
+
+    if (
+      request.method === "GET" &&
+      requestUrl.pathname ===
+        "/api/inventory"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(
+          request
+        );
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error:
+            "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const character =
+        await loadFirstCharacterForUser(
+          authUser.id
+        );
+
+      if (!character) {
+        writeJson(response, 404, {
+          ok: false,
+          error:
+            "Nenhum personagem foi encontrado."
+        });
+        return;
+      }
+
+      const items =
+        await loadCharacterInventory(
+          character.id
+        );
+
+      writeJson(response, 200, {
+        ok: true,
+        character: {
+          id: character.id,
+          name: character.name
+        },
+        capacities: {
+          inventory: 12,
+          potions: 6
+        },
+        items
+      });
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      requestUrl.pathname ===
+        "/api/inventory/move"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(
+          request
+        );
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error:
+            "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const character =
+        await loadFirstCharacterForUser(
+          authUser.id
+        );
+
+      if (!character) {
+        writeJson(response, 404, {
+          ok: false,
+          error:
+            "Nenhum personagem foi encontrado."
+        });
+        return;
+      }
+
+      const payload =
+        await readJsonBody(request);
+
+      const items =
+        await moveCharacterInventoryItem(
+          character.id,
+          payload
+        );
+
+      writeJson(response, 200, {
+        ok: true,
+        character: {
+          id: character.id,
+          name: character.name
+        },
+        capacities: {
+          inventory: 12,
+          potions: 6
+        },
+        items
       });
       return;
     }
