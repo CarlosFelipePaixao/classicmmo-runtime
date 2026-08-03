@@ -125,6 +125,25 @@ const ITEM_CATALOG = Object.freeze({
     })
   }),
 
+  slime_gel: Object.freeze({
+    key: "slime_gel",
+    name: "Gosma de Slime",
+    description:
+      "Material viscoso deixado por slimes.",
+    category: "material",
+    equipmentSlot: null,
+    rarity: "common",
+    stackable: true,
+    maximumStack: 99,
+    iconKey: "slime_gel",
+    stats: Object.freeze({
+      attack: 0,
+      defense: 0,
+      maxHp: 0,
+      maxMp: 0
+    })
+  }),
+
   minor_health_potion: Object.freeze({
     key: "minor_health_potion",
     name: "Poção Menor de Vida",

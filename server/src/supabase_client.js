@@ -1,4 +1,4 @@
-﻿const { createClient } = require("@supabase/supabase-js");
+const { createClient } = require("@supabase/supabase-js");
 const { resolveAppearanceSprite, resolveCharacterSprite } = require("./appearance_sprite");
 const {
   STARTER_INVENTORY,
@@ -7,6 +7,9 @@ const {
   serializeInventoryRows,
   calculateCharacterStats
 } = require("./inventory_catalog");
+const {
+  getRewardDefinition
+} = require("./reward_catalog");
 
 let supabase = null;
 
@@ -1003,6 +1006,188 @@ async function moveCharacterInventoryItem(
   );
 }
 
+
+function normalizeRewardKey(value) {
+  const rewardKey =
+    String(value || "").trim();
+
+  if (
+    !/^[a-z0-9][a-z0-9._:-]{0,79}$/.test(
+      rewardKey
+    )
+  ) {
+    return "";
+  }
+
+  return rewardKey;
+}
+
+async function claimCharacterReward(
+  character,
+  rewardKeyValue
+) {
+  if (!character || !character.id) {
+    throw new Error(
+      "Personagem ausente ao conceder recompensa."
+    );
+  }
+
+  const rewardKey =
+    normalizeRewardKey(
+      rewardKeyValue
+    );
+
+  const reward =
+    getRewardDefinition(
+      rewardKey
+    );
+
+  if (!reward) {
+    throw new Error(
+      "Recompensa online desconhecida."
+    );
+  }
+
+  const items = reward.items.map(
+    (entry) => {
+      const definition =
+        getItemDefinition(
+          entry.itemKey
+        );
+
+      if (!definition) {
+        throw new Error(
+          `O item ${entry.itemKey} não existe no catálogo.`
+        );
+      }
+
+      const quantity =
+        Math.max(
+          1,
+          Math.min(
+            999,
+            Math.round(
+              Number(entry.quantity) || 1
+            )
+          )
+        );
+
+      return {
+        itemKey: definition.key,
+        quantity,
+        maximumStack:
+          Math.max(
+            1,
+            Math.min(
+              999,
+              Number(
+                definition.maximumStack
+              ) || 1
+            )
+          ),
+        container:
+          entry.container === "potions"
+            ? "potions"
+            : "inventory"
+      };
+    }
+  );
+
+  const client = getSupabaseClient();
+
+  const { error } = await client.rpc(
+    "claim_character_reward",
+    {
+      p_character_id:
+        character.id,
+      p_reward_key:
+        reward.key,
+      p_once_per_character:
+        reward.oncePerCharacter === true,
+      p_items:
+        items
+    }
+  );
+
+  if (error) {
+    const message =
+      String(error.message || "");
+
+    if (
+      message.includes(
+        "reward already claimed"
+      )
+    ) {
+      throw new Error(
+        "Essa recompensa já foi recebida por este personagem."
+      );
+    }
+
+    if (
+      message.includes(
+        "inventory is full"
+      )
+    ) {
+      throw new Error(
+        "A mochila está cheia. Libere um slot antes de receber a recompensa."
+      );
+    }
+
+    if (
+      message.includes(
+        "claim_character_reward"
+      ) ||
+      message.includes(
+        "function public.claim_character_reward"
+      )
+    ) {
+      throw new Error(
+        "A migração SQL 004 das recompensas ainda não foi executada."
+      );
+    }
+
+    console.error(
+      "[Rewards] Falha ao conceder recompensa:",
+      error
+    );
+
+    throw new Error(
+      "Não foi possível salvar a recompensa."
+    );
+  }
+
+  const state =
+    await loadCharacterInventoryState(
+      character
+    );
+
+  return {
+    reward: {
+      key: reward.key,
+      label: reward.label,
+      message: reward.message,
+      items: items.map(
+        (entry) => {
+          const definition =
+            getItemDefinition(
+              entry.itemKey
+            );
+
+          return {
+            itemKey: entry.itemKey,
+            name:
+              definition
+                ? definition.name
+                : entry.itemKey,
+            quantity: entry.quantity
+          };
+        }
+      )
+    },
+    state
+  };
+}
+
 module.exports = {
   getSupabaseClient,
   loadAuthUserFromToken,
@@ -1017,5 +1202,6 @@ module.exports = {
   loadSpawnForNewCharacter,
   loadCharacterInventory,
   loadCharacterInventoryState,
-  moveCharacterInventoryItem
+  moveCharacterInventoryItem,
+  claimCharacterReward
 };

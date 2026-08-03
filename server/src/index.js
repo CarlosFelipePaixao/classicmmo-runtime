@@ -15,7 +15,8 @@ const {
   loadSpawnForCharacter,
   loadSpawnForNewCharacter,
   loadCharacterInventoryState,
-  moveCharacterInventoryItem
+  moveCharacterInventoryItem,
+  claimCharacterReward
 } = require("./supabase_client");
 
 const PORT = Number(process.env.PORT || 7777);
@@ -799,6 +800,72 @@ async function handleHttpRequest(request, response) {
         },
         items: state.items,
         stats: state.stats
+      });
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      requestUrl.pathname ===
+        "/api/rewards/claim"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(
+          request
+        );
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error:
+            "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const character =
+        await loadFirstCharacterForUser(
+          authUser.id
+        );
+
+      if (!character) {
+        writeJson(response, 404, {
+          ok: false,
+          error:
+            "Nenhum personagem foi encontrado."
+        });
+        return;
+      }
+
+      const payload =
+        await readJsonBody(request);
+
+      const result =
+        await claimCharacterReward(
+          character,
+          payload.rewardKey
+        );
+
+      writeJson(response, 200, {
+        ok: true,
+        character: {
+          id: character.id,
+          name: character.name,
+          classKey:
+            character.class_key,
+          level:
+            Number(character.level) || 1
+        },
+        reward: result.reward,
+        message:
+          result.reward.message,
+        capacities: {
+          inventory: 12,
+          potions: 6,
+          equipment: 7
+        },
+        items: result.state.items,
+        stats: result.state.stats
       });
       return;
     }
