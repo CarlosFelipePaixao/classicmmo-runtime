@@ -293,6 +293,12 @@ bool Game_Interpreter_Map::CommandEnemyEncounter(lcf::rpg::EventCommand const& c
 
 	BattleArgs args;
 
+	args.lumnia_map_id =
+		Game_Map::GetMapId();
+
+	args.lumnia_source =
+		LumniaBattleSource::EventCommand;
+
 	args.troop_id = ValueOrVariable(com.parameters[0], com.parameters[1]);
 
 	switch (com.parameters[2]) {

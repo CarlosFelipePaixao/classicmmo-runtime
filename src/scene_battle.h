@@ -50,11 +50,21 @@ class Game_Battler;
 
 using BattleContinuation = std::function<void(BattleResult)>;
 
+/* LUMNIA_BATTLE_TELEMETRY_SOURCE */
+enum class LumniaBattleSource {
+	Unknown = 0,
+	RandomEncounter = 1,
+	EventCommand = 2
+};
+
 struct BattleArgs {
 	BattleContinuation on_battle_end;
 	std::string background;
 	int troop_id = 0;
 	int terrain_id = 0;
+	int lumnia_map_id = 0;
+	LumniaBattleSource lumnia_source =
+		LumniaBattleSource::Unknown;
 	lcf::rpg::System::BattleFormation formation = lcf::rpg::System::BattleFormation_terrain;
 	lcf::rpg::System::BattleCondition condition = lcf::rpg::System::BattleCondition_none;
 	bool first_strike = false;
@@ -176,6 +186,9 @@ protected:
 	State previous_state = State_Start;
 	int cycle = 0;
 	int troop_id = 0;
+	int lumnia_map_id = 0;
+	LumniaBattleSource lumnia_source =
+		LumniaBattleSource::Unknown;
 	int escape_chance = 0;
 	bool allow_escape = false;
 	bool first_strike = false;

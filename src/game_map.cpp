@@ -1641,6 +1641,9 @@ bool Game_Map::PrepareEncounter(BattleArgs& args) {
 	}
 
 	args.troop_id = encounters[Rand::GetRandomNumber(0, encounters.size() - 1)];
+	args.lumnia_map_id = GetMapId();
+	args.lumnia_source =
+		LumniaBattleSource::RandomEncounter;
 
 	if (RuntimePatches::EncounterRandomnessAlert::HandleEncounter(args.troop_id)) {
 		//Cancel the battle setup

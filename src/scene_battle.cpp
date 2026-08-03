@@ -48,8 +48,184 @@
 #include "enemyai.h"
 #include "feature.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+#endif
+
+namespace {
+const char* LumniaBattleSourceName(
+	LumniaBattleSource source
+) {
+	switch (source) {
+		case LumniaBattleSource::RandomEncounter:
+			return "random";
+		case LumniaBattleSource::EventCommand:
+			return "event";
+		case LumniaBattleSource::Unknown:
+		default:
+			return "unknown";
+	}
+}
+
+const char* LumniaBattleResultName(
+	BattleResult result
+) {
+	switch (result) {
+		case BattleResult::Victory:
+			return "victory";
+		case BattleResult::Escape:
+			return "escape";
+		case BattleResult::Defeat:
+			return "defeat";
+		case BattleResult::Abort:
+		default:
+			return "abort";
+	}
+}
+
+void LumniaEmitPcBattleFinished(
+	LumniaBattleSource source,
+	int map_id,
+	int troop_id,
+	BattleResult result
+) {
+#if defined(__EMSCRIPTEN__)
+	std::ostringstream payload;
+
+	payload
+		<< "{"
+		<< "\"source\":\""
+		<< LumniaBattleSourceName(source)
+		<< "\","
+		<< "\"mapId\":"
+		<< map_id
+		<< ","
+		<< "\"troopId\":"
+		<< troop_id
+		<< ","
+		<< "\"result\":\""
+		<< LumniaBattleResultName(result)
+		<< "\","
+		<< "\"enemies\":[";
+
+	const auto enemies =
+		Main_Data::game_enemyparty->GetEnemies();
+
+	for (std::size_t index = 0;
+		index < enemies.size();
+		++index)
+	{
+		const auto* enemy = enemies[index];
+
+		if (index > 0) {
+			payload << ",";
+		}
+
+		const bool defeated =
+			enemy->GetHp() <= 0;
+
+		payload
+			<< "{"
+			<< "\"enemyId\":"
+			<< enemy->GetId()
+			<< ","
+			<< "\"troopMemberId\":"
+			<< enemy->GetTroopMemberId()
+			<< ","
+			<< "\"hp\":"
+			<< enemy->GetHp()
+			<< ","
+			<< "\"hidden\":"
+			<< (
+				enemy->IsHidden()
+					? "true"
+					: "false"
+			)
+			<< ","
+			<< "\"defeated\":"
+			<< (
+				defeated
+					? "true"
+					: "false"
+			)
+			<< "}";
+	}
+
+	payload << "]}";
+
+	const std::string payload_json =
+		payload.str();
+
+	EM_ASM({
+		if (
+			typeof window === "undefined" ||
+			!window.lumniaDesktop
+		) {
+			return;
+		}
+
+		let detail = null;
+
+		try {
+			detail = JSON.parse(
+				UTF8ToString($0)
+			);
+		}
+		catch (error) {
+			console.error(
+				"[Lumnia Battle] Payload inválido.",
+				error
+			);
+			return;
+		}
+
+		window.__LUMNIA_LAST_BATTLE__ =
+			detail;
+
+		if (
+			window.__lumniaBattleTelemetryReady
+		) {
+			window.dispatchEvent(
+				new CustomEvent(
+					"lumnia:battle-finished",
+					{ detail }
+				)
+			);
+		}
+		else {
+			if (!Array.isArray(
+				window.__lumniaPendingBattleTelemetry
+			)) {
+				window.__lumniaPendingBattleTelemetry =
+					[];
+			}
+
+			window.__lumniaPendingBattleTelemetry.push(
+				detail
+			);
+		}
+	}, payload_json.c_str());
+
+	Output::Debug(
+		"[Lumnia PC] Batalha finalizada: mapa {}, tropa {}, origem {}, resultado {}",
+		map_id,
+		troop_id,
+		LumniaBattleSourceName(source),
+		LumniaBattleResultName(result)
+	);
+#else
+	(void)source;
+	(void)map_id;
+	(void)troop_id;
+	(void)result;
+#endif
+}
+} // namespace
+
 Scene_Battle::Scene_Battle(const BattleArgs& args)
 	: troop_id(args.troop_id),
+	lumnia_map_id(args.lumnia_map_id),
+	lumnia_source(args.lumnia_source),
 	allow_escape(args.allow_escape),
 	first_strike(args.first_strike),
 	on_battle_end(args.on_battle_end)
@@ -610,6 +786,13 @@ void Scene_Battle::SelectionFlash(Game_Battler* battler) {
 
 void Scene_Battle::EndBattle(BattleResult result) {
 	assert(Scene::instance.get() == this && "EndBattle called multiple times!");
+
+	LumniaEmitPcBattleFinished(
+		lumnia_source,
+		lumnia_map_id,
+		troop_id,
+		result
+	);
 
 	Main_Data::game_party->IncBattleCount();
 	switch (result) {
