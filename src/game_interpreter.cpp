@@ -71,6 +71,10 @@
 #include "baseui.h"
 #include "algo.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+#endif
+
 
 // LUMNIA: debounce forte do Key Input da criacao de personagem.
 // Escopo propositalmente limitado ao Map0003 + variavel 0006 (CC_Tecla).
@@ -115,6 +119,68 @@ int LumniaDebounceCharacterCreationKeyInput(int key, int variable_id) {
 	cooldown_polls = LUMNIA_CC_INPUT_COOLDOWN_POLLS;
 	waiting_for_full_release = true;
 	return key;
+}
+
+// Ponte exclusiva do launcher PC:
+// comentário do RM2003 -> evento DOM no runtime Emscripten -> HUD Electron.
+bool LumniaHandlePcRewardComment(const std::string& comment) {
+	static const std::regex reward_pattern(
+		R"(^@lumnia_reward[ \t]+([a-z0-9][a-z0-9._:-]{0,79})[ \t]*$)"
+	);
+
+	std::smatch match;
+
+	if (!std::regex_match(comment, match, reward_pattern)) {
+		return false;
+	}
+
+	const std::string reward_key = match[1].str();
+
+#if defined(__EMSCRIPTEN__)
+	EM_ASM({
+		if (
+			typeof window === 'undefined' ||
+			!window.lumniaDesktop
+		) {
+			return;
+		}
+
+		const rewardKey = UTF8ToString($0);
+		const detail = { rewardKey };
+
+		if (window.__lumniaPcRewardBridgeReady) {
+			window.dispatchEvent(
+				new CustomEvent(
+					'lumnia:reward-request',
+					{ detail }
+				)
+			);
+		}
+		else {
+			if (!Array.isArray(
+				window.__lumniaPendingRewardRequests
+			)) {
+				window.__lumniaPendingRewardRequests = [];
+			}
+
+			window.__lumniaPendingRewardRequests.push(
+				detail
+			);
+		}
+	}, reward_key.c_str());
+
+	Output::Debug(
+		"[Lumnia PC] Recompensa solicitada pelo evento: {}",
+		reward_key
+	);
+#else
+	Output::Debug(
+		"[Lumnia] Comando de recompensa ignorado fora do launcher web de PC: {}",
+		reward_key
+	);
+#endif
+
+	return true;
 }
 } // namespace
 
@@ -2152,6 +2218,14 @@ std::optional<bool> Game_Interpreter::HandleDestinyScript(const lcf::rpg::EventC
 }
 
 bool Game_Interpreter::CommandComment(const lcf::rpg::EventCommand &com) {
+	if (
+		LumniaHandlePcRewardComment(
+			ToString(com.string)
+		)
+	) {
+		return true;
+	}
+
 	if (auto handled = HandleDynRpgScript(com); handled.has_value()) {
 		return handled.value();
 	}
