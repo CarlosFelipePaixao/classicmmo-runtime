@@ -13,6 +13,26 @@ const REWARD_CATALOG = Object.freeze({
         container: "inventory"
       })
     ])
+  }),
+
+  /*
+   * Drop repetível da Fase 2.
+   *
+   * O evento do RPG Maker controla quando a batalha foi vencida.
+   * O servidor continua decidindo qual item e quantidade serão concedidos.
+   */
+  "drop.slime.basic": Object.freeze({
+    key: "drop.slime.basic",
+    label: "Drop de Slime",
+    message: "Você recolheu 1 Gosma de Slime.",
+    oncePerCharacter: false,
+    items: Object.freeze([
+      Object.freeze({
+        itemKey: "slime_gel",
+        quantity: 1,
+        container: "inventory"
+      })
+    ])
   })
 });
 
