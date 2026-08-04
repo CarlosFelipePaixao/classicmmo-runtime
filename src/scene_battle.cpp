@@ -90,6 +90,20 @@ void LumniaEmitPcBattleFinished(
 	BattleResult result
 ) {
 #if defined(__EMSCRIPTEN__)
+
+	/* LUMNIA_BATTLE_REWARD_TOTALS_V2 */
+	const bool lumnia_victory =
+		result == BattleResult::Victory;
+
+	const int lumnia_experience =
+		lumnia_victory
+			? Main_Data::game_enemyparty->GetExp()
+			: 0;
+
+	const int lumnia_gold =
+		lumnia_victory
+			? Main_Data::game_enemyparty->GetMoney()
+			: 0;
 	std::ostringstream payload;
 
 	payload
@@ -106,6 +120,12 @@ void LumniaEmitPcBattleFinished(
 		<< "\"result\":\""
 		<< LumniaBattleResultName(result)
 		<< "\","
+		<< "\"experience\":"
+		<< lumnia_experience
+		<< ","
+		<< "\"gold\":"
+		<< lumnia_gold
+		<< ","
 		<< "\"enemies\":[";
 
 	const auto enemies =
