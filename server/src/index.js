@@ -19,6 +19,11 @@ const {
   claimCharacterReward
 } = require("./supabase_client");
 
+const {
+  startCharacterBattle,
+  finishCharacterBattle
+} = require("./battle_service");
+
 const PORT = Number(process.env.PORT || 7777);
 // LUMNIA_LOGIN_SPRITE_GHOST_SERVER_FIX
 const SPAWN_OVERRIDE_DELAY_MS = Number(process.env.SPAWN_OVERRIDE_DELAY_MS || 0);
@@ -866,6 +871,105 @@ async function handleHttpRequest(request, response) {
         },
         items: result.state.items,
         stats: result.state.stats
+      });
+      return;
+    }
+
+    // LUMNIA_BATTLE_SESSIONS_HTTP_V1
+    if (
+      request.method === "POST" &&
+      requestUrl.pathname ===
+        "/api/battles/start"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(
+          request
+        );
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error:
+            "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const character =
+        await loadFirstCharacterForUser(
+          authUser.id
+        );
+
+      if (!character) {
+        writeJson(response, 404, {
+          ok: false,
+          error:
+            "Nenhum personagem foi encontrado."
+        });
+        return;
+      }
+
+      const payload =
+        await readJsonBody(request);
+
+      const battle =
+        await startCharacterBattle(
+          character,
+          payload
+        );
+
+      writeJson(response, 201, {
+        ok: true,
+        battle
+      });
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      requestUrl.pathname ===
+        "/api/battles/finish"
+    ) {
+      const authUser =
+        await authenticateHttpRequest(
+          request
+        );
+
+      if (!authUser) {
+        writeJson(response, 401, {
+          ok: false,
+          error:
+            "Sessão inválida ou expirada."
+        });
+        return;
+      }
+
+      const character =
+        await loadFirstCharacterForUser(
+          authUser.id
+        );
+
+      if (!character) {
+        writeJson(response, 404, {
+          ok: false,
+          error:
+            "Nenhum personagem foi encontrado."
+        });
+        return;
+      }
+
+      const payload =
+        await readJsonBody(request);
+
+      const battle =
+        await finishCharacterBattle(
+          character,
+          payload
+        );
+
+      writeJson(response, 200, {
+        ok: true,
+        battle
       });
       return;
     }
