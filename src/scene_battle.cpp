@@ -83,6 +83,126 @@ const char* LumniaBattleResultName(
 	}
 }
 
+/* LUMNIA_BATTLE_STARTED_EVENT_V1 */
+void LumniaEmitPcBattleStarted(
+	LumniaBattleSource source,
+	int map_id,
+	int troop_id
+) {
+#if defined(__EMSCRIPTEN__)
+	std::ostringstream payload;
+
+	payload
+		<< "{"
+		<< "\"source\":\""
+		<< LumniaBattleSourceName(source)
+		<< "\","
+		<< "\"mapId\":"
+		<< map_id
+		<< ","
+		<< "\"troopId\":"
+		<< troop_id
+		<< ","
+		<< "\"enemies\":[";
+
+	const auto enemies =
+		Main_Data::game_enemyparty->GetEnemies();
+
+	for (std::size_t index = 0;
+		index < enemies.size();
+		++index)
+	{
+		const auto* enemy = enemies[index];
+
+		if (index > 0) {
+			payload << ",";
+		}
+
+		payload
+			<< "{"
+			<< "\"enemyId\":"
+			<< enemy->GetId()
+			<< ","
+			<< "\"troopMemberId\":"
+			<< enemy->GetTroopMemberId()
+			<< ","
+			<< "\"hidden\":"
+			<< (
+				enemy->IsHidden()
+					? "true"
+					: "false"
+			)
+			<< "}";
+	}
+
+	payload << "]}";
+
+	const std::string payload_json =
+		payload.str();
+
+	EM_ASM({
+		if (
+			typeof window === "undefined" ||
+			!window.lumniaDesktop
+		) {
+			return;
+		}
+
+		let detail = null;
+
+		try {
+			detail = JSON.parse(
+				UTF8ToString($0)
+			);
+		}
+		catch (error) {
+			console.error(
+				"[Lumnia Battle] Início inválido.",
+				error
+			);
+			return;
+		}
+
+		window.__LUMNIA_LAST_BATTLE_START__ =
+			detail;
+
+		if (
+			window.__lumniaBattleSessionClientReady
+		) {
+			window.dispatchEvent(
+				new CustomEvent(
+					"lumnia:battle-started",
+					{ detail }
+				)
+			);
+		}
+		else {
+			if (!Array.isArray(
+				window.__lumniaPendingBattleStarted
+			)) {
+				window.__lumniaPendingBattleStarted =
+					[];
+			}
+
+			window.__lumniaPendingBattleStarted.push(
+				detail
+			);
+		}
+	}, payload_json.c_str());
+
+	Output::Debug(
+		"[Lumnia PC] Batalha iniciada: mapa {}, tropa {}, origem {}",
+		map_id,
+		troop_id,
+		LumniaBattleSourceName(source)
+	);
+#else
+	(void)source;
+	(void)map_id;
+	(void)troop_id;
+#endif
+}
+
 void LumniaEmitPcBattleFinished(
 	LumniaBattleSource source,
 	int map_id,
@@ -326,6 +446,12 @@ void Scene_Battle::Start() {
 	Output::Debug("Starting battle {} ({}): algos=({}/{})", troop_id, troop->name, autobattle_algos[default_autobattle_algo]->GetName(), enemyai_algos[default_enemyai_algo]->GetName());
 
 	Game_Battle::Init(troop_id);
+
+	LumniaEmitPcBattleStarted(
+		lumnia_source,
+		lumnia_map_id,
+		troop_id
+	);
 
 	CreateUi();
 
