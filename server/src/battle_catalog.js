@@ -1,23 +1,40 @@
 "use strict";
 
+const crypto = require("crypto");
+
+const {
+  getItemDefinition
+} = require("./inventory_catalog");
+
 const BATTLE_ENEMY_CATALOG = Object.freeze({
   /*
    * Inimigo 1 do RPG Maker usado no teste atual.
    *
-   * O servidor, e não o cliente, controla EXP e ouro.
-   * Quando o valor mudar no RPG Maker, atualize também este catálogo.
+   * O servidor controla EXP, ouro e loot.
+   * Nesta primeira validação, cada Slime derrotado concede
+   * exatamente 1 Gosma de Slime.
    */
   "1": Object.freeze({
     enemyId: 1,
     key: "slime",
     label: "Slime",
     experience: 28,
-    gold: 5
+    gold: 5,
+    loot: Object.freeze([
+      Object.freeze({
+        itemKey: "slime_gel",
+        chanceBps: 10000,
+        minQuantity: 1,
+        maxQuantity: 1,
+        container: "inventory"
+      })
+    ])
   })
 });
 
 const MAX_BATTLE_ENEMIES = 30;
 const MAX_BATTLE_REWARD = 1000000;
+const MAX_LOOT_QUANTITY = 999;
 
 function normalizeBattleSource(value) {
   const source =
@@ -244,6 +261,139 @@ function normalizeBattleFinishPayload(payload) {
   };
 }
 
+function rollLootQuantity(entry) {
+  const minimum =
+    Math.max(
+      1,
+      Math.min(
+        MAX_LOOT_QUANTITY,
+        Math.round(
+          Number(entry.minQuantity) || 1
+        )
+      )
+    );
+
+  const maximum =
+    Math.max(
+      minimum,
+      Math.min(
+        MAX_LOOT_QUANTITY,
+        Math.round(
+          Number(entry.maxQuantity) || minimum
+        )
+      )
+    );
+
+  if (minimum === maximum) {
+    return minimum;
+  }
+
+  return crypto.randomInt(
+    minimum,
+    maximum + 1
+  );
+}
+
+function rollEnemyLoot(definition) {
+  const aggregated =
+    new Map();
+
+  for (
+    const entry of
+    Array.isArray(definition.loot)
+      ? definition.loot
+      : []
+  ) {
+    const item =
+      getItemDefinition(
+        entry.itemKey
+      );
+
+    if (!item) {
+      throw new Error(
+        `O item ${entry.itemKey} do loot não existe no catálogo.`
+      );
+    }
+
+    const chanceBps =
+      Math.max(
+        0,
+        Math.min(
+          10000,
+          Math.round(
+            Number(entry.chanceBps) || 0
+          )
+        )
+      );
+
+    if (
+      chanceBps === 0 ||
+      crypto.randomInt(0, 10000) >=
+        chanceBps
+    ) {
+      continue;
+    }
+
+    const container =
+      entry.container === "potions"
+        ? "potions"
+        : "inventory";
+
+    const key =
+      `${item.key}:${container}`;
+
+    const current =
+      aggregated.get(key) || {
+        itemKey: item.key,
+        name: item.name,
+        rarity: item.rarity,
+        iconKey: item.iconKey,
+        container,
+        quantity: 0
+      };
+
+    current.quantity +=
+      rollLootQuantity(entry);
+
+    aggregated.set(
+      key,
+      current
+    );
+  }
+
+  return Array.from(
+    aggregated.values()
+  );
+}
+
+function mergeLoot(target, entries) {
+  for (const entry of entries) {
+    const key =
+      `${entry.itemKey}:${entry.container}`;
+
+    const current =
+      target.get(key) || {
+        ...entry,
+        quantity: 0
+      };
+
+    current.quantity =
+      Math.min(
+        MAX_LOOT_QUANTITY,
+        current.quantity +
+          Math.max(
+            1,
+            Number(entry.quantity) || 1
+          )
+      );
+
+    target.set(
+      key,
+      current
+    );
+  }
+}
+
 function calculateBattleRewards({
   result,
   roster,
@@ -253,7 +403,8 @@ function calculateBattleRewards({
     return {
       experience: 0,
       gold: 0,
-      defeatedEnemies: []
+      defeatedEnemies: [],
+      loot: []
     };
   }
 
@@ -269,6 +420,7 @@ function calculateBattleRewards({
     );
 
   const defeatedEnemies = [];
+  const loot = new Map();
   let experience = 0;
   let gold = 0;
 
@@ -318,6 +470,11 @@ function calculateBattleRewards({
         definition.gold
       ) || 0;
 
+    mergeLoot(
+      loot,
+      rollEnemyLoot(definition)
+    );
+
     defeatedEnemies.push({
       enemyId:
         reported.enemyId,
@@ -343,7 +500,11 @@ function calculateBattleRewards({
           Math.round(gold)
         )
       ),
-    defeatedEnemies
+    defeatedEnemies,
+    loot:
+      Array.from(
+        loot.values()
+      )
   };
 }
 

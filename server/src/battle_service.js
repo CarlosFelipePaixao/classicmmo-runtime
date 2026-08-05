@@ -1,7 +1,8 @@
 "use strict";
 
 const {
-  getSupabaseClient
+  getSupabaseClient,
+  grantCharacterBattleLoot
 } = require("./supabase_client");
 
 const {
@@ -124,7 +125,7 @@ async function loadBattleSession(
       "character_battle_sessions"
     )
     .select(
-      "id,character_id,status,result,enemy_roster,experience_awarded,gold_awarded,started_at,finished_at"
+      "id,character_id,status,result,enemy_roster,experience_awarded,gold_awarded,loot_awarded,started_at,finished_at"
     )
     .eq(
       "id",
@@ -145,6 +146,16 @@ async function loadBattleSession(
 
     if (
       message.includes(
+        "loot_awarded"
+      )
+    ) {
+      throw new Error(
+        "A migração SQL 006 do loot ainda não foi executada."
+      );
+    }
+
+    if (
+      message.includes(
         "character_battle_sessions"
       )
     ) {
@@ -159,6 +170,128 @@ async function loadBattleSession(
   }
 
   return data || null;
+}
+
+function normalizeStoredLoot(value) {
+  return (
+    Array.isArray(value)
+      ? value
+      : []
+  )
+    .map(
+      (entry) => ({
+        itemKey:
+          String(
+            entry &&
+            entry.itemKey ||
+            ""
+          ),
+        name:
+          String(
+            entry &&
+            entry.name ||
+            entry &&
+            entry.itemKey ||
+            "Item"
+          ),
+        rarity:
+          String(
+            entry &&
+            entry.rarity ||
+            "common"
+          ),
+        iconKey:
+          String(
+            entry &&
+            entry.iconKey ||
+            entry &&
+            entry.itemKey ||
+            ""
+          ),
+        container:
+          entry &&
+          entry.container ===
+            "potions"
+            ? "potions"
+            : "inventory",
+        quantity:
+          Math.max(
+            1,
+            Math.min(
+              999,
+              Math.round(
+                Number(
+                  entry &&
+                  entry.quantity
+                ) || 1
+              )
+            )
+          )
+      })
+    )
+    .filter(
+      (entry) =>
+        Boolean(entry.itemKey)
+    );
+}
+
+async function grantStoredBattleLoot(
+  character,
+  sessionId,
+  loot
+) {
+  const normalizedLoot =
+    normalizeStoredLoot(loot);
+
+  if (normalizedLoot.length === 0) {
+    return {
+      loot: [],
+      pendingLoot: [],
+      lootPending: false,
+      inventory: null
+    };
+  }
+
+  try {
+    const result =
+      await grantCharacterBattleLoot(
+        character,
+        sessionId,
+        normalizedLoot
+      );
+
+    return {
+      loot:
+        result.items,
+      pendingLoot: [],
+      lootPending: false,
+      inventory: {
+        items:
+          result.state.items,
+        stats:
+          result.state.stats
+      },
+      alreadyGranted:
+        result.alreadyGranted === true
+    };
+  }
+  catch (error) {
+    if (
+      error &&
+      error.code ===
+        "LUMNIA_INVENTORY_FULL"
+    ) {
+      return {
+        loot: [],
+        pendingLoot:
+          normalizedLoot,
+        lootPending: true,
+        inventory: null
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function finishCharacterBattle(
@@ -191,133 +324,173 @@ async function finishCharacterBattle(
     );
   }
 
-  if (
+  let repeated =
     session.status !==
-    "started"
-  ) {
-    return {
-      repeated: true,
-      sessionId:
-        session.id,
-      result:
-        session.result,
-      experience:
-        Number(
-          session.experience_awarded
-        ) || 0,
-      gold:
-        Number(
-          session.gold_awarded
-        ) || 0
-    };
-  }
+      "started";
 
-  const rewards =
-    calculateBattleRewards({
-      result:
-        battle.result,
-      roster:
-        session.enemy_roster,
-      reportedEnemies:
-        battle.enemies
-    });
+  let result =
+    session.result ||
+    battle.result;
 
-  const client =
-    getSupabaseClient();
+  let experience =
+    Number(
+      session.experience_awarded
+    ) || 0;
 
-  const {
-    data,
-    error
-  } = await client.rpc(
-    "finish_character_battle",
-    {
-      p_character_id:
-        character.id,
-      p_session_id:
-        battle.sessionId,
-      p_result:
-        battle.result,
-      p_defeated_enemies:
-        rewards.defeatedEnemies,
-      p_experience:
-        rewards.experience,
-      p_gold:
-        rewards.gold
-    }
-  );
+  let gold =
+    Number(
+      session.gold_awarded
+    ) || 0;
 
-  if (error) {
-    const message =
-      String(
-        error.message || ""
-      );
+  let totalXp = 0;
+  let totalGold = 0;
+  let authoritativeLoot =
+    normalizeStoredLoot(
+      session.loot_awarded
+    );
 
-    if (
-      message.includes(
-        "battle session expired"
-      )
-    ) {
-      throw new Error(
-        "A sessão da batalha expirou."
-      );
-    }
+  if (!repeated) {
+    const rewards =
+      calculateBattleRewards({
+        result:
+          battle.result,
+        roster:
+          session.enemy_roster,
+        reportedEnemies:
+          battle.enemies
+      });
 
-    if (
-      message.includes(
-        "finish_character_battle"
-      )
-    ) {
-      throw new Error(
-        "A migração SQL 005 das batalhas ainda não foi executada."
-      );
-    }
+    const client =
+      getSupabaseClient();
 
-    console.error(
-      "[Battle] Falha ao finalizar sessão:",
+    const {
+      data,
       error
+    } = await client.rpc(
+      "finish_character_battle_with_loot",
+      {
+        p_character_id:
+          character.id,
+        p_session_id:
+          battle.sessionId,
+        p_result:
+          battle.result,
+        p_defeated_enemies:
+          rewards.defeatedEnemies,
+        p_experience:
+          rewards.experience,
+        p_gold:
+          rewards.gold,
+        p_loot:
+          rewards.loot
+      }
     );
 
-    throw new Error(
-      "Não foi possível finalizar a sessão da batalha."
-    );
-  }
+    if (error) {
+      const message =
+        String(
+          error.message || ""
+        );
 
-  const row =
-    Array.isArray(data)
-      ? data[0]
-      : data;
+      if (
+        message.includes(
+          "battle session expired"
+        )
+      ) {
+        throw new Error(
+          "A sessão da batalha expirou."
+        );
+      }
 
-  if (!row) {
-    throw new Error(
-      "O servidor não retornou a recompensa da batalha."
-    );
-  }
+      if (
+        message.includes(
+          "finish_character_battle_with_loot"
+        )
+      ) {
+        throw new Error(
+          "A migração SQL 006 do loot ainda não foi executada."
+        );
+      }
 
-  return {
-    repeated: false,
-    sessionId:
-      String(
-        row.session_id ||
-        battle.sessionId
-      ),
-    result:
-      battle.result,
-    experience:
+      console.error(
+        "[Battle] Falha ao finalizar sessão com loot:",
+        error
+      );
+
+      throw new Error(
+        "Não foi possível finalizar a sessão da batalha."
+      );
+    }
+
+    const row =
+      Array.isArray(data)
+        ? data[0]
+        : data;
+
+    if (!row) {
+      throw new Error(
+        "O servidor não retornou a recompensa da batalha."
+      );
+    }
+
+    repeated =
+      row.was_repeated === true;
+
+    result =
+      battle.result;
+
+    experience =
       Number(
         row.experience_awarded
-      ) || 0,
-    gold:
+      ) || 0;
+
+    gold =
       Number(
         row.gold_awarded
-      ) || 0,
-    totalXp:
+      ) || 0;
+
+    totalXp =
       Number(
         row.total_xp
-      ) || 0,
-    totalGold:
+      ) || 0;
+
+    totalGold =
       Number(
         row.total_gold
-      ) || 0
+      ) || 0;
+
+    authoritativeLoot =
+      normalizeStoredLoot(
+        row.loot_awarded
+      );
+  }
+
+  const lootResult =
+    await grantStoredBattleLoot(
+      character,
+      battle.sessionId,
+      authoritativeLoot
+    );
+
+  return {
+    repeated,
+    sessionId:
+      battle.sessionId,
+    result,
+    experience,
+    gold,
+    totalXp,
+    totalGold,
+    loot:
+      lootResult.loot,
+    pendingLoot:
+      lootResult.pendingLoot,
+    lootPending:
+      lootResult.lootPending,
+    lootAlreadyGranted:
+      lootResult.alreadyGranted === true,
+    inventory:
+      lootResult.inventory
   };
 }
 

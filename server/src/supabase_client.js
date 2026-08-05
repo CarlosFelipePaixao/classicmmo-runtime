@@ -1188,6 +1188,219 @@ async function claimCharacterReward(
   };
 }
 
+
+/* LUMNIA_BATTLE_LOOT_GRANT_V1 */
+async function grantCharacterBattleLoot(
+  character,
+  sessionIdValue,
+  lootValue
+) {
+  if (!character || !character.id) {
+    throw new Error(
+      "Personagem ausente ao conceder loot de batalha."
+    );
+  }
+
+  const sessionId =
+    String(
+      sessionIdValue || ""
+    ).trim();
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      sessionId
+    )
+  ) {
+    throw new Error(
+      "Sessão inválida ao conceder loot."
+    );
+  }
+
+  const items =
+    (Array.isArray(lootValue)
+      ? lootValue
+      : [])
+      .map(
+        (entry) => {
+          const definition =
+            getItemDefinition(
+              entry &&
+              entry.itemKey
+            );
+
+          if (!definition) {
+            throw new Error(
+              "O item " +
+              String(
+                entry &&
+                entry.itemKey ||
+                "desconhecido"
+              ) +
+              " não existe no catálogo."
+            );
+          }
+
+          const quantity =
+            Math.max(
+              1,
+              Math.min(
+                999,
+                Math.round(
+                  Number(
+                    entry &&
+                    entry.quantity
+                  ) || 1
+                )
+              )
+            );
+
+          return {
+            itemKey:
+              definition.key,
+            name:
+              definition.name,
+            rarity:
+              definition.rarity,
+            iconKey:
+              definition.iconKey,
+            quantity,
+            maximumStack:
+              Math.max(
+                1,
+                Math.min(
+                  999,
+                  Number(
+                    definition.maximumStack
+                  ) || 1
+                )
+              ),
+            container:
+              entry &&
+              entry.container ===
+                "potions"
+                ? "potions"
+                : "inventory"
+          };
+        }
+      );
+
+  if (items.length === 0) {
+    return {
+      alreadyGranted: false,
+      items: [],
+      state:
+        await loadCharacterInventoryState(
+          character
+        )
+    };
+  }
+
+  const client =
+    getSupabaseClient();
+
+  let alreadyGranted = false;
+
+  const { error } =
+    await client.rpc(
+      "claim_character_reward",
+      {
+        p_character_id:
+          character.id,
+        p_reward_key:
+          "battle:" + sessionId,
+        p_once_per_character:
+          true,
+        p_items:
+          items.map(
+            (entry) => ({
+              itemKey:
+                entry.itemKey,
+              quantity:
+                entry.quantity,
+              maximumStack:
+                entry.maximumStack,
+              container:
+                entry.container
+            })
+          )
+      }
+    );
+
+  if (error) {
+    const message =
+      String(
+        error.message || ""
+      );
+
+    if (
+      message.includes(
+        "reward already claimed"
+      )
+    ) {
+      alreadyGranted = true;
+    }
+    else if (
+      message.includes(
+        "inventory is full"
+      )
+    ) {
+      const inventoryError =
+        new Error(
+          "A mochila está cheia. O loot desta batalha ficou pendente."
+        );
+
+      inventoryError.code =
+        "LUMNIA_INVENTORY_FULL";
+
+      throw inventoryError;
+    }
+    else if (
+      message.includes(
+        "claim_character_reward"
+      )
+    ) {
+      throw new Error(
+        "A migração SQL 004 das recompensas ainda não foi executada."
+      );
+    }
+    else {
+      console.error(
+        "[Battle Loot] Falha ao salvar loot:",
+        error
+      );
+
+      throw new Error(
+        "Não foi possível salvar o loot da batalha."
+      );
+    }
+  }
+
+  const state =
+    await loadCharacterInventoryState(
+      character
+    );
+
+  return {
+    alreadyGranted,
+    items:
+      items.map(
+        (entry) => ({
+          itemKey:
+            entry.itemKey,
+          name:
+            entry.name,
+          rarity:
+            entry.rarity,
+          iconKey:
+            entry.iconKey,
+          quantity:
+            entry.quantity
+        })
+      ),
+    state
+  };
+}
+
 module.exports = {
   getSupabaseClient,
   loadAuthUserFromToken,
@@ -1203,5 +1416,6 @@ module.exports = {
   loadCharacterInventory,
   loadCharacterInventoryState,
   moveCharacterInventoryItem,
-  claimCharacterReward
+  claimCharacterReward,
+  grantCharacterBattleLoot
 };
