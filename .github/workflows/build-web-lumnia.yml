@@ -37,6 +37,10 @@ jobs:
       - name: Baixar o código do Lumnia
         uses: actions/checkout@v6
 
+      - name: Validar servidor e cliente compartilhado
+        working-directory: server
+        run: npm ci && npm test
+
       - name: Instalar ferramentas do runner
         shell: bash
         run: |
@@ -90,6 +94,8 @@ jobs:
             "$BUILDSCRIPTS_DIR"
 
           git -C "$BUILDSCRIPTS_DIR" checkout "$BUILDSCRIPTS_COMMIT"
+
+          python3 builds/ci/reliable-web-downloads.py "$BUILDSCRIPTS_DIR"
 
           cd "$BUILDSCRIPTS_DIR/emscripten"
 
