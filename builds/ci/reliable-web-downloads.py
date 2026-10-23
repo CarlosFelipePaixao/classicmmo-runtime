@@ -17,3 +17,13 @@ for original, replacement in replacements.items():
         raise SystemExit("EasyRPG downloader changed; review the pinned CI patch.")
     source = source.replace(original, replacement)
 common.write_text(source)
+
+# The zlib website can serve a successful HTML response to hosted runners.
+# Use the identical archive published by zlib's maintainer on GitHub.
+packages = common.parent / "packages.sh"
+source = packages.read_text()
+original = 'https://zlib.net/fossils/zlib-1.3.2.tar.gz'
+if original not in source:
+    raise SystemExit("Pinned zlib URL changed; review the CI mirror.")
+packages.write_text(source.replace(original,
+    'https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz'))
