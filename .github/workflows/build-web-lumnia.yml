@@ -10,6 +10,9 @@ on:
       - "CMakeLists.txt"
       - "CMakePresets.json"
       - "builds/cmake/**"
+      - "builds/ci/**"
+      - "server/**"
+      - "resources/classicmmo-web/**"
       - "src/**"
   workflow_dispatch:
 
