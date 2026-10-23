@@ -695,7 +695,7 @@ return "";
                                 actor->SetBaseMaxSp(LumniaGetOnlineActorValue(4));
                                 EM_ASM({
                                         if (!window.LumniaState) return;
-                                        window.LumniaState.vitals = { hp: $0, maxHp: $1, mp: $2, maxMp: $3 };
+                                        window.LumniaState.vitals = ({ hp: $0, maxHp: $1, mp: $2, maxMp: $3 });
                                         window.dispatchEvent(new CustomEvent('lumnia:vitals', { detail: window.LumniaState.vitals }));
                                 }, actor->GetHp(), actor->GetMaxHp(), actor->GetSp(), actor->GetMaxSp());
                         }

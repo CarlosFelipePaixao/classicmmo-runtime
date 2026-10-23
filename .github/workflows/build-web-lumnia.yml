@@ -108,6 +108,13 @@ jobs:
 
           touch "$BUILDSCRIPTS_DIR/.lumnia-emscripten-ready"
 
+      - name: Salvar dependências compiladas
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BUILDSCRIPTS_DIR }}
+          key: easyrpg-emscripten-${{ runner.os }}-${{ env.EMSCRIPTEN_VERSION }}-${{ env.BUILDSCRIPTS_COMMIT }}-v1
+
       - name: Validar dependências restauradas
         shell: bash
         run: |
