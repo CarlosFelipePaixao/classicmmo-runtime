@@ -238,7 +238,7 @@ namespace classicmmo
                                                 "[ClassicMMO] Connection closed. code=" +
                                                 std::to_string(close_code));
 
-                                        if (close_code == 4001)
+                                        if (close_code == 4001 || close_code == 4003)
                                         {
                                                 manual_disconnect.store(true);
                                                 reconnect_pending.store(false);
@@ -941,7 +941,7 @@ namespace classicmmo
                         "[ClassicMMO] Browser WebSocket closed. code=" +
                         std::to_string(close_code));
 
-                if (close_code == 4001)
+                if (close_code == 4001 || close_code == 4003)
                 {
                         manual_disconnect.store(true);
                         reconnect_pending.store(false);

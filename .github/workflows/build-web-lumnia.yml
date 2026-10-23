@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - lumnia/save-personagem-supabase
+      - release/lumnia-correcoes-20261023
     paths:
       - ".github/workflows/build-web-lumnia.yml"
       - "CMakeLists.txt"

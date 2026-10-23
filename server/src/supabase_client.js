@@ -1,3 +1,4 @@
+const { progressionForCharacter } = require("./progression");
 const { createClient } = require("@supabase/supabase-js");
 const { resolveAppearanceSprite, resolveCharacterSprite } = require("./appearance_sprite");
 const {
@@ -962,13 +963,15 @@ async function moveCharacterInventoryItem(
   const client = getSupabaseClient();
 
   const { error } = await client.rpc(
-    "move_character_inventory_item",
+    "move_character_inventory_item_checked",
     {
       p_character_id: characterId,
       p_from_container: fromContainer,
       p_from_slot: fromSlot,
       p_to_container: toContainer,
-      p_to_slot: toSlot
+      p_to_slot: toSlot,
+      p_expected_source_id: source.id,
+      p_expected_target_id: target?.id || null
     }
   );
 
@@ -977,6 +980,13 @@ async function moveCharacterInventoryItem(
       String(
         error.message || ""
       );
+
+    if (databaseMessage.includes("inventory changed")) {
+      throw new Error("Seu inventário mudou durante a ação. Atualize a mochila e tente novamente.");
+    }
+    if (databaseMessage.includes("move_character_inventory_item_checked")) {
+      throw new Error("A migração SQL 008 do inventário precisa ser aplicada.");
+    }
 
     console.error(
       "[Inventory] Falha ao mover item:",
@@ -1024,7 +1034,8 @@ function normalizeRewardKey(value) {
 
 async function claimCharacterReward(
   character,
-  rewardKeyValue
+  rewardKeyValue,
+  context = {}
 ) {
   if (!character || !character.id) {
     throw new Error(
@@ -1046,6 +1057,15 @@ async function claimCharacterReward(
     throw new Error(
       "Recompensa online desconhecida."
     );
+  }
+
+  if (!reward.oncePerCharacter) {
+    throw new Error("Recompensas repetíveis são concedidas somente por sessões de batalha.");
+  }
+  const player = context.player;
+  if (!player || player.characterId !== character.id || String(player.mapId) !== "1" ||
+      Math.abs(player.x - 13) + Math.abs(player.y - 19) > 2) {
+    throw new Error("Aproxime-se dos restos do slime para examinar a amostra.");
   }
 
   const items = reward.items.map(
@@ -1109,9 +1129,9 @@ async function claimCharacterReward(
     }
   );
 
-  if (error) {
-    const message =
-      String(error.message || "");
+  const alreadyClaimed = Boolean(error && String(error.message || "").includes("reward already claimed"));
+  if (error && !alreadyClaimed) {
+    const message = String(error.message || "");
 
     if (
       message.includes(
@@ -1165,7 +1185,8 @@ async function claimCharacterReward(
     reward: {
       key: reward.key,
       label: reward.label,
-      message: reward.message,
+      message: alreadyClaimed ? "Você já recolheu esta recompensa." : reward.message,
+      alreadyClaimed,
       items: items.map(
         (entry) => {
           const definition =

@@ -235,6 +235,8 @@ protected:
 	bool CommandPlaySound(lcf::rpg::EventCommand const& com);
 	bool CommandEndEventProcessing(lcf::rpg::EventCommand const& com);
 	bool CommandComment(lcf::rpg::EventCommand const& com);
+	std::string pending_lumnia_reward;
+	int pending_lumnia_reward_ticks = 0;
 	bool CommandGameOver(lcf::rpg::EventCommand const& com);
 	bool CommandChangeHeroName(lcf::rpg::EventCommand const& com);
 	bool CommandChangeHeroTitle(lcf::rpg::EventCommand const& com);

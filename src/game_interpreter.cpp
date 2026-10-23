@@ -147,6 +147,8 @@ bool LumniaHandlePcRewardComment(const std::string& comment) {
 
 		const rewardKey = UTF8ToString($0);
 		const detail = { rewardKey };
+		window.__LUMNIA_REWARD_RESULTS__ = window.__LUMNIA_REWARD_RESULTS__ || {};
+		window.__LUMNIA_REWARD_RESULTS__[rewardKey] = 0;
 
 		if (window.__lumniaPcRewardBridgeReady) {
 			window.dispatchEvent(
@@ -202,6 +204,8 @@ Game_Interpreter::~Game_Interpreter() {
 
 // Clear.
 void Game_Interpreter::Clear() {
+	pending_lumnia_reward.clear();
+	pending_lumnia_reward_ticks = 0;
 	_state = {};
 	_keyinput = {};
 	_async_op = {};
@@ -2218,11 +2222,30 @@ std::optional<bool> Game_Interpreter::HandleDestinyScript(const lcf::rpg::EventC
 }
 
 bool Game_Interpreter::CommandComment(const lcf::rpg::EventCommand &com) {
+#if defined(__EMSCRIPTEN__)
+	if (!pending_lumnia_reward.empty()) {
+		const int result = EM_ASM_INT({
+			const key = UTF8ToString($0).replace(/^@lumnia_reward\s+/, '').trim();
+			return (window.__LUMNIA_REWARD_RESULTS__ || {})[key] || 0;
+		}, pending_lumnia_reward.c_str());
+		if (result == 0 && ++pending_lumnia_reward_ticks < 1800) return false;
+		pending_lumnia_reward.clear();
+		pending_lumnia_reward_ticks = 0;
+		// Do not run subsequent local switches if the persistent grant failed.
+		if (result != 1) return CommandEndEventProcessing(com);
+		return true;
+	}
+#endif
 	if (
 		LumniaHandlePcRewardComment(
 			ToString(com.string)
 		)
 	) {
+#if defined(__EMSCRIPTEN__)
+		pending_lumnia_reward = ToString(com.string);
+		pending_lumnia_reward_ticks = 0;
+		return false;
+#endif
 		return true;
 	}
 

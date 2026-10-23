@@ -10,10 +10,13 @@ const {
   normalizeBattleFinishPayload,
   calculateBattleRewards
 } = require("./battle_catalog");
+const { validateEncounter } = require("./world_policy");
+const { progressionForCharacter } = require("./progression");
 
 async function startCharacterBattle(
   character,
-  payload
+  payload,
+  context = {}
 ) {
   if (
     !character ||
@@ -25,9 +28,7 @@ async function startCharacterBattle(
   }
 
   const battle =
-    normalizeBattleStartPayload(
-      payload
-    );
+    validateEncounter(character, normalizeBattleStartPayload(payload), context.player);
 
   const client =
     getSupabaseClient();
@@ -342,8 +343,8 @@ async function finishCharacterBattle(
       session.gold_awarded
     ) || 0;
 
-  let totalXp = 0;
-  let totalGold = 0;
+  let totalXp = Number(character.xp) || 0;
+  let totalGold = Number(character.gold) || 0;
   let authoritativeLoot =
     normalizeStoredLoot(
       session.loot_awarded
@@ -465,6 +466,8 @@ async function finishCharacterBattle(
       );
   }
 
+  character = { ...character, xp: totalXp, gold: totalGold,
+    level: progressionForCharacter({ ...character, xp: totalXp }).level };
   const lootResult =
     await grantStoredBattleLoot(
       character,
@@ -474,6 +477,7 @@ async function finishCharacterBattle(
 
   return {
     repeated,
+    progression: progressionForCharacter({ ...character, xp: totalXp, gold: totalGold }),
     sessionId:
       battle.sessionId,
     result,
@@ -494,7 +498,15 @@ async function finishCharacterBattle(
   };
 }
 
+async function abandonCharacterBattles(character) {
+  if (!character?.id) throw new Error("Personagem ausente.");
+  const { error } = await getSupabaseClient().rpc("abandon_character_battles", { p_character_id: character.id });
+  if (error) throw new Error("Não foi possível encerrar a batalha anterior. Verifique a migração SQL 007.");
+  return { recovered: true };
+}
+
 module.exports = {
+  abandonCharacterBattles,
   startCharacterBattle,
   finishCharacterBattle
 };

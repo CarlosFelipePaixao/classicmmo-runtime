@@ -1,6 +1,8 @@
 #include "classicmmo_runtime.h"
 
 #include "game_player.h"
+#include "game_actor.h"
+#include "game_party.h"
 #include "game_variables.h"
 #include "game_vehicle.h"
 #include "main_data.h"
@@ -28,6 +30,12 @@ EM_JS(char *, ClassicMMOGetQueryParam, (const char *key_ptr), {
         var key = UTF8ToString(key_ptr);
         var params = new URLSearchParams(window.location.search);
         var value = params.get(key);
+        if (key === 'token' && window.LumniaSession) {
+                value = window.LumniaSession.getToken();
+        }
+        if (key === 'server' && window.LumniaSession) {
+                value = window.LumniaSession.serverUrl;
+        }
 
         if (!value) {
                 return 0;
@@ -37,6 +45,14 @@ EM_JS(char *, ClassicMMOGetQueryParam, (const char *key_ptr), {
         var ptr = _malloc(length);
         stringToUTF8(value, ptr, length);
         return ptr;
+});
+
+EM_JS(int, LumniaGetOnlineActorValue, (int index), {
+        var state = window.LumniaState;
+        if (!state || !state.stats || !state.stats.total) return 0;
+        var stats = state.stats.total;
+        var values = [state.stats.level || 1, stats.attack, stats.defense, stats.maxHp, stats.maxMp];
+        return Math.max(0, Math.min(999999, Number(values[index]) || 0)) | 0;
 });
 #endif
 
@@ -182,7 +198,7 @@ return "";
 
                         if (env_name == "CLASSICMMO_SERVER_URL")
                         {
-                                return "ws://3.134.107.141:7777";
+                                return "wss://lumnia-server.onrender.com";
                         }
 #endif
 
@@ -602,6 +618,10 @@ return "";
 
                 g_initialized = true;
 
+#if defined(__EMSCRIPTEN__)
+                EM_ASM({ window.__LUMNIA_RUNTIME_PROTOCOL__ = 2; });
+#endif
+
 #if defined(CLASSICMMO_HAS_IXWEBSOCKET)
                 ix::initNetSystem();
 #endif
@@ -657,6 +677,30 @@ return "";
 		}
 
 		g_network_client.Update();
+
+#if defined(__EMSCRIPTEN__)
+                // Apply the same persistent attributes used by inventory and equipment.
+                // SetBase* adjusts modifiers, rather than adding bonuses each frame.
+                static int online_state_ticks = 0;
+                if (++online_state_ticks >= 15 && Main_Data::game_party) {
+                        online_state_ticks = 0;
+                        auto* actor = Main_Data::game_party->GetActor(0);
+                        const int online_hp = LumniaGetOnlineActorValue(3);
+                        if (actor && online_hp > 0) {
+                                const int level = LumniaGetOnlineActorValue(0);
+                                if (actor->GetLevel() != level) actor->SetLevel(level);
+                                actor->SetBaseAtk(LumniaGetOnlineActorValue(1));
+                                actor->SetBaseDef(LumniaGetOnlineActorValue(2));
+                                actor->SetBaseMaxHp(online_hp);
+                                actor->SetBaseMaxSp(LumniaGetOnlineActorValue(4));
+                                EM_ASM({
+                                        if (!window.LumniaState) return;
+                                        window.LumniaState.vitals = { hp: $0, maxHp: $1, mp: $2, maxMp: $3 };
+                                        window.dispatchEvent(new CustomEvent('lumnia:vitals', { detail: window.LumniaState.vitals }));
+                                }, actor->GetHp(), actor->GetMaxHp(), actor->GetSp(), actor->GetMaxSp());
+                        }
+                }
+#endif
 		ApplyPendingSpawnOverride();
                 ProcessCharacterCreationPersistence();
 

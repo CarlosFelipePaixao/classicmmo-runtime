@@ -1,3 +1,4 @@
+const { progressionForCharacter, GROWTH } = require("./progression");
 const EQUIPMENT_SLOTS = Object.freeze({
   1: "helmet",
   2: "weapon",
@@ -354,12 +355,9 @@ function getBaseStatsForCharacter(
     CLASS_BASE_STATS[classKey] ||
     CLASS_BASE_STATS.warrior;
 
-  return {
-    attack: base.attack,
-    defense: base.defense,
-    maxHp: base.maxHp,
-    maxMp: base.maxMp
-  };
+  const steps = progressionForCharacter(character).level - 1;
+  const growth = GROWTH[classKey] || GROWTH.warrior;
+  return Object.fromEntries(Object.keys(base).map(key => [key, base[key] + growth[key] * steps]));
 }
 
 function calculateCharacterStats(
@@ -437,7 +435,7 @@ function calculateCharacterStats(
   const level =
     Math.max(
       1,
-      Number(character.level) || 1
+      progressionForCharacter(character).level
     );
 
   total.combatPower =
